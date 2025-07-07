@@ -18,7 +18,7 @@ main (int argc, char **argv)
   Lisp_Object prog;
   Lisp_Object res;
 
-  printf ("Tom Lisp v0.1.0\n");
+  printf ("ErLisp v0.1.0\n");
 
   init_builtins ();
   l = lex_init ();
