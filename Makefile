@@ -1,6 +1,11 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -g
-LFLAGS = -g
+# if readline
+CFLAGS = -Wall -Wextra -O2 -g -DHAVE_READLINE=1
+LFLAGS = -g -lreadline
+# else (no readline): comment above, decomment this
+# CFLAGS = -Wall -Wextra -O2 -g
+# LFLAGS = -g
+# endif
 SRC_DIR = src
 TEST_DIR = test
 OBJ_DIR = obj
@@ -19,7 +24,7 @@ TEST_OBJECTS := $(patsubst $(TEST_DIR)/test_%.c,$(OBJ_DIR)/test_%.o,$(TEST_SOURC
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(OBJECTS) -o $@
+	$(CC) $(LFLAGS) $(OBJECTS) -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@

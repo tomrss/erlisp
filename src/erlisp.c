@@ -1,11 +1,14 @@
+#include "debug.h"
 #include "eval.h"
 #include "lexer.h"
 #include "lisp.h"
 #include "parser.h"
 #include <stdio.h>
 #include <stdlib.h>
-
-#include "debug.h"
+#ifdef HAVE_READLINE
+#include <readline/history.h>
+#include <readline/readline.h>
+#endif /* HAVE_READLINE */
 
 int
 main (int argc, char **argv)
@@ -25,20 +28,40 @@ main (int argc, char **argv)
       // repl
 
       char *line = NULL;
-      size_t len = 0;
-      ssize_t read;
-      int line_num = 1;
+      ssize_t lenline;
+      int linum = 1;
 
       while (1)
         {
-          printf ("[%3d]> ", line_num);
+#ifdef HAVE_READLINE
+          char buf[20];
+          sprintf (buf, "erlisp [%3d]> ", linum);
+          line = readline(buf);
+
+          if (line == NULL) break;
+
+          if (*line)
+            add_history(line);
+          else {
+            free(line);
+            break;
+          }
+          
+          lenline = strlen(line);
+#else /* HAVE_READLINE */
+          size_t len = 0;
+          printf ("erlisp [%3d]> ", linum);
           fflush (stdout);
 
-          read = getline (&line, &len, stdin);
-          if (read == EOF)
+          lenline = getline (&line, &len, stdin);
+          if (lenline == EOF)
             break;
-
-          s = stream_string (line, read);
+#endif
+        if (strcmp(line, "exit") == 0) {
+            free(line);
+            break;
+        }
+          s = stream_string (line, lenline);
           lex_set_stream (l, s);
           prog = parse_sexp (l);
 
@@ -47,7 +70,7 @@ main (int argc, char **argv)
           printf ("\n");
 
           stream_close (s);
-          line_num++;
+          linum++;
         }
 
       free (line);
