@@ -115,7 +115,7 @@ test_execution_run (TestExecution *te, char *suitename)
     {
       TestSuite *suite = te->suites[i];
 
-      if (suitename != NULL && !strcmp (suitename, suite->name))
+      if (suitename != NULL && strcmp (suitename, suite->name) != 0)
         {
           continue;
         }
