@@ -160,7 +160,9 @@ call_function (Lisp_Object env, Lisp_Object form)
           exit (23);
         }
       // TODO ugly return in a switch that should decide arity!
-      return call_unevalled_subr (subr, funargs);
+      result = call_unevalled_subr (subr, funargs);
+      stack_pop_free ();
+      return result;
     default:
       arity = maxargs;
     }
@@ -276,8 +278,9 @@ progn (Lisp_Object env, Lisp_Object form)
     {
       val = eval (env, f_car (tail));
       tail = f_cdr (tail);
-      // reload env from the stack, as prviously evalled form could have changed it!
-      env = env_current();
+      // reload env from the stack, as prviously evalled form could have
+      // changed it!
+      env = env_current ();
     }
 
   return val;
