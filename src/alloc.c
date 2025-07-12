@@ -239,8 +239,7 @@ free_lisp_obj (Lisp_Object o)
     // integer is immediate, not a pointer. nothing to do
     return;
 
-  // FIXME something really bad
-  /* free (unbox_pointer (o)); */
+  free (unbox_pointer (o));
 }
 
 void
