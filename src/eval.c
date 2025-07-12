@@ -42,11 +42,11 @@ Lisp_Object
 eval_symbol (Lisp_Object env, Lisp_Object symbol)
 {
   if (eq (symbol, q_t))
-    return box_int (1);
+    return q_t;
   if (eq (symbol, q_nil))
-    return box_int (0);
+    return q_nil;
   if (eq (symbol, q_unbound))
-    return box_int (0);
+    return q_unbound;
 
   Lisp_Object val;
   Lisp_Symbol *usymbol = unbox_symbol (symbol);

@@ -99,10 +99,7 @@ static TestResult
 test_eval_nil ()
 {
   Lisp_Object res = eval (l_globalenv, q_nil);
-  TEST_CHECK_TYPE ("eval nil", res, LISP_INTG);
-  Lisp_Integer ures = unbox_int (res);
-  if (ures != 0)
-    return TEST_RESULT_FAIL ("expected nil to eval to 1, got %ld", ures);
+  TEST_ASSERT (eq(res, q_nil), "expected nil to eval to nil");
   return TEST_RESULT_SUCCESS;
 }
 
@@ -110,10 +107,7 @@ static TestResult
 test_eval_t ()
 {
   Lisp_Object res = eval (l_globalenv, q_t);
-  TEST_CHECK_TYPE ("eval t", res, LISP_INTG);
-  Lisp_Integer ures = unbox_int (res);
-  if (ures != 1)
-    return TEST_RESULT_FAIL ("expected t to eval to 1, got %ld", ures);
+  TEST_ASSERT (eq(res, q_t), "expected t to eval to t");
   return TEST_RESULT_SUCCESS;
 }
 
