@@ -1,4 +1,6 @@
+#include "alloc.h"
 #include "debug.h"
+#include "env.h"
 #include "eval.h"
 #include "lexer.h"
 #include "lisp.h"
@@ -20,6 +22,7 @@ main (int argc, char **argv)
 
   printf ("ErLisp v0.1.0\n");
 
+  init_alloc ();
   init_builtins ();
   l = lex_init ();
 
@@ -36,18 +39,15 @@ main (int argc, char **argv)
 #ifdef HAVE_READLINE
           char buf[20];
           sprintf (buf, "erlisp [%3d]> ", linum);
-          line = readline(buf);
+          line = readline (buf);
 
-          if (line == NULL) break;
+          if (line == NULL)
+            break;
 
           if (*line)
-            add_history(line);
-          else {
-            free(line);
-            break;
-          }
-          
-          lenline = strlen(line);
+            add_history (line);
+
+          lenline = strlen (line);
 #else /* HAVE_READLINE */
           size_t len = 0;
           printf ("erlisp [%3d]> ", linum);
@@ -57,17 +57,22 @@ main (int argc, char **argv)
           if (lenline == EOF)
             break;
 #endif
-        if (strcmp(line, "exit") == 0) {
-            free(line);
-            break;
-        }
+          if (lenline == 0)
+            continue;
+
+          if (strcmp (line, "exit") == 0)
+            {
+              free (line);
+              break;
+            }
           s = stream_string (line, lenline);
           lex_set_stream (l, s);
           prog = parse_sexp (l);
 
-          res = eval (l_globalenv, prog);
+          res = eval (env_current(), prog);
           print_form (res);
           printf ("\n");
+          gc();
 
           stream_close (s);
           linum++;

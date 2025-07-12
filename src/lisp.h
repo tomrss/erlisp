@@ -75,20 +75,29 @@ typedef Lisp_Object (*lisp_subr_fun_8) (Lisp_Object arg1, Lisp_Object arg2,
                                         Lisp_Object arg7, Lisp_Object arg8);
 typedef Lisp_Object (*lisp_subr_fun_many) (int argc, Lisp_Object *argv);
 
+/*
+  TODO: gcmarks like that (char gcmark) are not compact in memory.
+  They screw alignment of structs, causing weird padding of all types,
+  incrementing memory usage and cpu cycles by a lot.
+ */
+
 struct lisp_cons
 {
+  char gcmark;
   Lisp_Object car;
   Lisp_Object cdr;
 };
 
 struct lisp_string
 {
+  char gcmark;
   size_t size;
-  const char *data;
+  char data[];
 };
 
 struct lisp_symbol
 {
+  char gcmark;
   Lisp_Object name;
   Lisp_Object value;
   // next symbol in the obarray bucket, see obarray.h.  this is
@@ -98,6 +107,7 @@ struct lisp_symbol
 
 struct lisp_vector
 {
+  char gcmark;
   size_t size;
   // flexible array member
   Lisp_Object contents[];
@@ -123,6 +133,7 @@ union lisp_subr_fun
 
 struct lisp_subr
 {
+  // no gc mark, subr cannot be gc'd
   const char *name;
   union lisp_subr_fun function;
   int minargs;
@@ -131,10 +142,11 @@ struct lisp_subr
 
 struct lisp_lambda
 {
+  char gcmark;
   int minargs;
   int maxargs;
-  Lisp_Object *args;
   Lisp_Object form;
+  Lisp_Object args[];
 };
 
 /* Type checking */
@@ -306,6 +318,10 @@ Lisp_Object f_quote (Lisp_Object form);
 Lisp_Object f_let (Lisp_Object form); // plain let is useless in our implementation, it's a let*
 Lisp_Object f_lambda (Lisp_Object form);
 Lisp_Object f_define (Lisp_Object form);
+Lisp_Object f_format (int argc, Lisp_Object *argv);
+Lisp_Object f_gc ();
+Lisp_Object f_memstats ();
+Lisp_Object f_memdump ();
 
 // init.c - lisp initialization and globals
 extern Lisp_Object q_nil;

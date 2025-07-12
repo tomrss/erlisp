@@ -15,24 +15,26 @@ static TestResult test_lisp_negint64 ();
 static TestResult test_lisp_bigint64 ();
 static TestResult test_lisp_string ();
 static TestResult test_lisp_nstring ();
+static TestResult test_lisp_bigstring ();
 static TestResult test_lisp_symbol ();
 static TestResult test_lisp_cons ();
 static TestResult test_lisp_cons_nested ();
 static TestResult test_lisp_vector ();
 
 static TestCase test_lisp_cases[] = {
-  { .skip = 0, .name = "int32", .run = &test_lisp_int32 },
-  { .skip = 0, .name = "negint32", .run = &test_lisp_negint32 },
-  { .skip = 0, .name = "bigint32", .run = &test_lisp_bigint32 },
-  { .skip = 0, .name = "int64", .run = &test_lisp_int64 },
-  { .skip = 0, .name = "negint64", .run = &test_lisp_negint64 },
-  { .skip = 0, .name = "bigint64", .run = &test_lisp_bigint64 },
-  { .skip = 0, .name = "string", .run = &test_lisp_string },
-  { .skip = 0, .name = "nstring", .run = &test_lisp_nstring },
-  { .skip = 0, .name = "symbol", .run = &test_lisp_symbol },
-  { .skip = 0, .name = "cons", .run = &test_lisp_cons },
-  { .skip = 0, .name = "cons_nested", .run = &test_lisp_cons_nested },
-  { .skip = 0, .name = "vector", .run = &test_lisp_vector },
+  { .skip = 0, .name = "int32", .run = test_lisp_int32 },
+  { .skip = 0, .name = "negint32", .run = test_lisp_negint32 },
+  { .skip = 0, .name = "bigint32", .run = test_lisp_bigint32 },
+  { .skip = 0, .name = "int64", .run = test_lisp_int64 },
+  { .skip = 0, .name = "negint64", .run = test_lisp_negint64 },
+  { .skip = 0, .name = "bigint64", .run = test_lisp_bigint64 },
+  { .skip = 0, .name = "string", .run = test_lisp_string },
+  { .skip = 0, .name = "nstring", .run = test_lisp_nstring },
+  { .skip = 0, .name = "bigstring", .run = test_lisp_bigstring },
+  { .skip = 0, .name = "symbol", .run = test_lisp_symbol },
+  { .skip = 0, .name = "cons", .run = test_lisp_cons },
+  { .skip = 0, .name = "cons_nested", .run = test_lisp_cons_nested },
+  { .skip = 0, .name = "vector", .run = test_lisp_vector },
   {}, // terminator
 };
 
@@ -185,10 +187,36 @@ test_lisp_nstring ()
   if (strncmp (ustr->data, str, ustr->size))
     return TEST_RESULT_FAIL ("str data: expected %s, got %s", str, ustr->data);
 
-  fullstr[0] = 'X';
-  if (ustr->data[0] != 's')
-    return TEST_RESULT_FAIL (
-        "str was not copied!! modified by original pointer");
+  free_lisp_obj (lstr);
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_lisp_bigstring ()
+{
+  char *str
+      = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do "
+        "eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim "
+        "ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut "
+        "aliquip ex ea commodo consequat. Duis aute irure dolor in "
+        "reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla "
+        "pariatur. Excepteur sint occaecat cupidatat non proident, sunt in "
+        "culpa qui officia deserunt mollit anim id est laborum";
+  size_t strlen = 444; // len of str above
+
+  Lisp_Object lstr = make_nstring (str, strlen);
+
+  TEST_CHECK_TYPE ("str", lstr, LISP_STRG);
+
+  Lisp_String *ustr = unbox_string (lstr);
+
+  if (ustr->size != strlen)
+    return TEST_RESULT_FAIL ("str len: expected %d, got %d", strlen,
+                             ustr->size);
+
+  if (strncmp (ustr->data, str, ustr->size))
+    return TEST_RESULT_FAIL ("str data: expected %s, got %s", str, ustr->data);
 
   free_lisp_obj (lstr);
 

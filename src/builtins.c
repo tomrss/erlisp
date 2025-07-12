@@ -1,4 +1,5 @@
 #include "alloc.h"
+#include "blkalloc.h"
 #include "debug.h"
 #include "env.h"
 #include "eval.h"
@@ -163,6 +164,9 @@ f_string_length (Lisp_Object string)
 Lisp_Object
 f_length (Lisp_Object list)
 {
+  if (eq (list, q_nil))
+    return 0;
+
   if (type_of (list) == LISP_CONS)
     {
       int64_t length = 0;
@@ -181,7 +185,7 @@ f_length (Lisp_Object list)
     return f_string_length (list);
 
   // TODO err wrong type
-  fprintf(stderr, "err wrong type: list, %s\n", type_name(type_of(list)));
+  fprintf (stderr, "err wrong type: list, %s\n", type_name (type_of (list)));
   exit (12);
 }
 
@@ -292,6 +296,70 @@ f_lambda (Lisp_Object form)
   // TODO &optional and &re st
   return make_lambda (nargs, nargs, argv, body);
 }
+
+Lisp_Object
+f_format (int argc, Lisp_Object *argv)
+{
+  if (argc < 2)
+    {
+      // TODO err
+      printf ("wrong arguments\n");
+      return q_nil;
+    }
+
+  // TODO support formatting
+
+  Lisp_Object dest = argv[0];
+  Lisp_Object fmt = argv[1];
+  Lisp_String *ufmt = unbox_string (fmt);
+
+  if (eq (dest, box_int(1)))
+    {
+      // print to stdout
+      fwrite (ufmt->data, sizeof (char), ufmt->size, stdout);
+      printf("\n");
+      return q_nil;
+    }
+  if (eq (dest, box_int(0)))
+    {
+      // return fmt string
+      return fmt;
+    }
+
+  // TODO else print to dest, not supported yet
+  fprintf (stderr,
+           "print to dest not nil (return str) or t (print stdout) not "
+           "supported yet\n");
+  return q_nil;
+}
+
+Lisp_Object
+f_gc ()
+{
+  printf("before GC:\n");
+  print_memstats (memstats());
+  struct memstats stats = gc ();
+  printf("after GC:\n");
+  print_memstats (stats);
+  return q_nil;
+}
+
+Lisp_Object
+f_memdump ()
+{
+  memdump();
+  return q_nil;
+}
+
+Lisp_Object
+f_memstats ()
+{
+  // TODO return lisp object containing info, not print stdout
+  print_memstats (memstats ());
+  return q_nil;
+}
+
+// helpers impl
 
 static Lisp_Object
 assoc_w_pred (Lisp_Object key, Lisp_Object alist,

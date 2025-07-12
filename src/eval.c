@@ -70,13 +70,12 @@ eval_symbol (Lisp_Object env, Lisp_Object symbol)
           // todo err
           fprintf (stderr, "unbound symbol: %s\n",
                    unbox_string (unbox_symbol (symbol)->name)->data);
-          exit (11);
+          exit (13);
         }
     }
 
   // store val in symbol for faster lookups. TODO is this dangerous?
   val = unbox_symbol (lookedup)->value;
-  usymbol->value = val;
   return val;
 }
 
@@ -123,7 +122,11 @@ call_function (Lisp_Object env, Lisp_Object form)
       // TODO error
       fprintf (stderr, "illegal function type: %s\n",
                type_name (type_of (fun)));
+      printf ("symbol ");
+      print_form (funsym);
+      printf (" -> ");
       print_form (fun);
+      printf ("\n");
       exit (12);
     }
 
@@ -329,7 +332,11 @@ define (Lisp_Object env, Lisp_Object form)
   Lisp_Object newenv = env_new (env, var);
 
   // TODO this is not thread safe :(
-  stack_current_set_env (newenv);
+  // TODO this seems very wrong
+
+  // set new env in the parent stack (the current is the one in which
+  // "define" is evalled and will die afterwards
+  stack_parent_set_env(newenv);
 
   return value;
 }

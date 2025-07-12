@@ -72,4 +72,8 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("let", 1, UNEVALLED, f_let));
   obarray_put (o, DEFSUBR ("lambda", 2, UNEVALLED, f_lambda));
   obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
+  obarray_put (o, DEFSUBR ("format", 2, MANY, f_format));
+  obarray_put (o, DEFSUBR ("gc", 0, 0, f_gc));
+  obarray_put (o, DEFSUBR ("memstats", 0, 0, f_memstats));
+  obarray_put (o, DEFSUBR ("memdump", 0, 0, f_memdump));
 }

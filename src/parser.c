@@ -2,6 +2,8 @@
 #include "alloc.h"
 #include "lexer.h"
 #include "lisp.h"
+#include "obarray.h"
+#include <string.h>
 
 // Helper to parse a Lisp form starting from a given token
 static Lisp_Object parse_sexp_from_tok (Lexer *l, Token tok);
@@ -55,9 +57,30 @@ parse_sexp_from_tok (Lexer *l, Token tok)
     case TOK_INT_LITERAL:
       return box_int (tok.integer);
     case TOK_STRING_LITERAL:
+      // TODO lexer could get us the len too instead of null terminated string
       return make_string (tok.string);
     case TOK_SYMBOL:
-      return make_str_symbol (tok.symbol);
+      {
+        // TODO this seems reeaaaally wrong
+
+        // fake string for lookup in obarray. we don't want to lisp
+        // alloc it, it should not be managed and gc'd.
+        Lisp_String *s = malloc (sizeof (Lisp_String));
+        int len = strlen (tok.string);
+        strncpy (s->data, tok.string, len);
+        s->size = len;
+        Lisp_Object obsym = obarray_lookup_name (v_obarray, box_string(s));
+        Lisp_Object ret;
+        if (type_of (obsym) == LISP_SYMB)
+          // return the symbol found
+          ret = obsym;
+        else
+          // create new symbol
+          ret = make_str_symbol (tok.symbol);
+        // cleanup
+        free(s);
+        return ret;
+      }
     case TOK_EOF:
       return q_nil;
     default:
@@ -85,7 +108,7 @@ parse (Lexer *l)
       Lisp_Object form = parse_sexp_from_tok (l, tok);
       Lisp_Object cell = make_cons (form, q_nil);
 
-      if (eq(forms, q_nil))
+      if (eq (forms, q_nil))
         forms = cell;
       else
         f_setcdr (tail, cell);
