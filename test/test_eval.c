@@ -56,7 +56,6 @@ test_eval_symbol ()
   Lisp_Integer ures = unbox_int (res);
   if (ures != 12)
     return TEST_RESULT_FAIL ("expected symb to eval to 12, got %ld", ures);
-  free_lisp_obj (test); // leak string memory, who cares
   return TEST_RESULT_SUCCESS;
 }
 
@@ -68,7 +67,6 @@ test_eval_vector ()
   TEST_CHECK_TYPE ("eval vect", res, LISP_VECT);
   if (!eq (test, res))
     return TEST_RESULT_FAIL ("expected vect to eval to itself");
-  free_lisp_obj (test);
   return TEST_RESULT_SUCCESS;
 }
 
@@ -80,7 +78,6 @@ test_eval_string ()
   TEST_CHECK_TYPE ("eval string", res, LISP_STRG);
   if (!eq (test, res))
     return TEST_RESULT_FAIL ("expected string to eval to itself");
-  free_lisp_obj (test);
   return TEST_RESULT_SUCCESS;
 }
 

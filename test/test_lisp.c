@@ -162,8 +162,6 @@ test_lisp_string ()
   if (strncmp (ustr->data, str, ustr->size))
     return TEST_RESULT_FAIL ("str data: expected %s, got %s", str, ustr->data);
 
-  free_lisp_obj (lstr);
-
   return TEST_RESULT_SUCCESS;
 }
 
@@ -186,8 +184,6 @@ test_lisp_nstring ()
 
   if (strncmp (ustr->data, str, ustr->size))
     return TEST_RESULT_FAIL ("str data: expected %s, got %s", str, ustr->data);
-
-  free_lisp_obj (lstr);
 
   return TEST_RESULT_SUCCESS;
 }
@@ -218,8 +214,6 @@ test_lisp_bigstring ()
   if (strncmp (ustr->data, str, ustr->size))
     return TEST_RESULT_FAIL ("str data: expected %s, got %s", str, ustr->data);
 
-  free_lisp_obj (lstr);
-
   return TEST_RESULT_SUCCESS;
 }
 
@@ -243,8 +237,6 @@ test_lisp_symbol ()
   if (strncmp (uname->data, name, uname->size))
     return TEST_RESULT_FAIL ("name data: expected %s, got %s", name,
                              uname->data);
-
-  free_lisp_obj (lsymbol);
 
   return TEST_RESULT_SUCCESS;
 }
@@ -274,10 +266,6 @@ test_lisp_cons ()
   if (unbox_int (ucons->cdr) != cdr)
     return TEST_RESULT_FAIL ("cdr unboxed: expected %d, got %d",
                              unbox_int (ucons->cdr), cdr);
-
-  free_lisp_obj (lcar);
-  free_lisp_obj (lcdr);
-  free_lisp_obj (lcons);
 
   return TEST_RESULT_SUCCESS;
 }
@@ -326,10 +314,6 @@ test_lisp_cons_nested ()
     return TEST_RESULT_FAIL ("cdr cdr cdr unboxed: expected '%s', got '%s'",
                              cdrcdrcdr, ustr->data);
 
-  free_lisp_obj (lcons);
-  free_lisp_obj (lconscdr);
-  free_lisp_obj (lconscdrcdr);
-
   return TEST_RESULT_SUCCESS;
 }
 
@@ -351,8 +335,6 @@ test_lisp_vector ()
       if (uvec->contents[i] != LISP_NULL)
         return TEST_RESULT_FAIL ("vec not initialized correctly");
     }
-
-  free_lisp_obj (lvec);
 
   return TEST_RESULT_SUCCESS;
 }

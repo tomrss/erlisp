@@ -39,8 +39,6 @@ test_obarray_init ()
     return TEST_RESULT_FAIL ("obarray size: %d different from buckets num %d",
                              uobarray->size, OBARRAY_BUCKETS);
 
-  free_lisp_obj (obarray);
-
   return TEST_RESULT_SUCCESS;
 }
 
@@ -55,8 +53,6 @@ test_obarray_empty ()
 
   // obarray_lookup_name returns INT representing the wannabe hash if not found
   TEST_CHECK_TYPE ("symbol found", symbol, LISP_INTG);
-
-  free_lisp_obj (obarray);
 
   return TEST_RESULT_SUCCESS;
 }
@@ -100,10 +96,6 @@ test_obarray_notfound ()
       TEST_CHECK_TYPE ("symbol not found", found, LISP_INTG);
     }
 
-  free_lisp_obj (obarray);
-  for (int i = 0; i < n; i++)
-    free_lisp_obj (symbols[i]);
-
   return TEST_RESULT_SUCCESS;
 }
 
@@ -124,9 +116,6 @@ test_obarray_found ()
     return TEST_RESULT_FAIL ("symbol expected: '%s', found '%s'",
                              unbox_string (unbox_symbol (s)->name)->data,
                              unbox_string (unbox_symbol (found)->name)->data);
-
-  free_lisp_obj (obarray);
-  free_lisp_obj (s);
 
   return TEST_RESULT_SUCCESS;
 }
@@ -164,10 +153,6 @@ test_obarray_foundall ()
             unbox_string (unbox_symbol (symbols[i])->name)->data,
             unbox_string (unbox_symbol (found)->name)->data);
     }
-
-  free_lisp_obj (obarray);
-  for (int i = 0; i < n; i++)
-    free_lisp_obj (symbols[i]);
 
   return TEST_RESULT_SUCCESS;
 }
