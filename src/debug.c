@@ -33,26 +33,27 @@ print_form (Lisp_Object form)
       printf ("%lld", unbox_int (form));
       break;
     case LISP_STRG:
-      printf ("\"%s\"", unbox_string (form)->data);
+      printf ("\"%.*s\"", (int) unbox_string (form)->size, unbox_string (form)->data);
       break;
     case LISP_VECT:
       printf ("[size:%zu]", unbox_vector (form)->size);
       break;
     case LISP_SUBR:
       printf ("['%s',%d,%d]", unbox_subr (form)->name,
-                    unbox_subr (form)->minargs, unbox_subr (form)->maxargs);
+              unbox_subr (form)->minargs, unbox_subr (form)->maxargs);
       break;
     case LISP_LMBD:
       printf ("[lambda,%d,%d]", unbox_lambda (form)->minargs,
-                    unbox_lambda (form)->maxargs);
+              unbox_lambda (form)->maxargs);
       break;
     case LISP_SYMB:
-      printf ("%s", unbox_string (unbox_symbol (form)->name)->data);
+      printf ("%.*s", (int)unbox_string (unbox_symbol (form)->name)->size,
+              unbox_string (unbox_symbol (form)->name)->data);
       break;
     case LISP_CONS:
       printf ("(");
       print_form (unbox_cons (form)->car);
-      printf (", ");
+      printf (" . ");
       print_form (unbox_cons (form)->cdr);
       printf (")");
       break;
@@ -63,7 +64,7 @@ print_form (Lisp_Object form)
 void
 debug_print_form (Lisp_Object form)
 {
-  print_form(form);
+  print_form (form);
 }
 #else  /* DEBUG_PRINT */
 void
@@ -87,14 +88,3 @@ debug_printf (const char *_, ...)
 {
 }
 #endif /* DEBUG_PRINT */
-
-void print_ptr_alignment(void *ptr, size_t align) {
-    printf("Pointer value: %p\n", ptr);
-    uintptr_t addr = (uintptr_t)ptr;
-    printf("Address as integer: 0x%lx\n", (unsigned long)addr);
-    if (addr % align == 0) {
-        printf("Pointer is aligned to %zu bytes\n", align);
-    } else {
-        printf("Pointer is NOT aligned to %zu bytes (offset: %lu)\n", align, addr % align);
-    }
-}
