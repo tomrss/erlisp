@@ -278,6 +278,87 @@ f_define (Lisp_Object form)
 }
 
 Lisp_Object
+f_and (Lisp_Object form)
+{
+  Lisp_Object tail = form;
+  Lisp_Object tem;
+  while (!nil (tail))
+    {
+      tem = f_eval (f_car (tail));
+      if (nil (tem))
+        return q_nil;
+      tail = f_cdr (tail);
+    }
+  return tem;
+}
+
+Lisp_Object
+f_or (Lisp_Object form)
+{
+  Lisp_Object tail = form;
+  Lisp_Object tem;
+  while (!nil (tail))
+    {
+      tem = f_eval (f_car (tail));
+      if (!nil (tem))
+        return tem;
+      tail = f_cdr (tail);
+    }
+  return q_nil;
+}
+
+Lisp_Object
+f_if (Lisp_Object form)
+{
+  Lisp_Object cond = f_car (form);
+  Lisp_Object body = f_cdr (form);
+
+  if (!nil (f_eval (cond)))
+    return f_eval (f_car (body));
+  else
+    return f_progn (f_cdr (body));
+}
+
+Lisp_Object
+f_when (Lisp_Object form)
+{
+  Lisp_Object cond = f_car (form);
+  Lisp_Object body = f_cdr (form);
+
+  if (!nil (f_eval (cond)))
+    return f_progn (body);
+
+  return q_nil;
+}
+
+Lisp_Object
+f_unless (Lisp_Object form)
+{
+  Lisp_Object cond = f_car (form);
+  Lisp_Object body = f_cdr (form);
+
+  if (nil (f_eval (cond)))
+    return f_progn (body);
+
+  return q_nil;
+}
+
+Lisp_Object
+f_cond (Lisp_Object form)
+{
+  Lisp_Object tail = form;
+  Lisp_Object tem;
+  while (!nil (tail))
+    {
+      tem = f_car (tail);
+      if (!nil (f_eval (f_car (tem))))
+        return f_eval (f_car (f_cdr (tem)));
+      tail = f_cdr (tail);
+    }
+  return q_nil;
+}
+
+Lisp_Object
 f_lambda (Lisp_Object form)
 {
   Lisp_Object args = f_car (form);
@@ -313,14 +394,14 @@ f_format (int argc, Lisp_Object *argv)
   Lisp_Object fmt = argv[1];
   Lisp_String *ufmt = unbox_string (fmt);
 
-  if (eq (dest, box_int(1)))
+  if (eq (dest, q_t))
     {
       // print to stdout
       fwrite (ufmt->data, sizeof (char), ufmt->size, stdout);
-      printf("\n");
+      printf ("\n");
       return q_nil;
     }
-  if (eq (dest, box_int(0)))
+  if (eq (dest, q_nil))
     {
       // return fmt string
       return fmt;
@@ -336,10 +417,10 @@ f_format (int argc, Lisp_Object *argv)
 Lisp_Object
 f_gc ()
 {
-  printf("before GC:\n");
-  print_memstats (memstats());
+  printf ("before GC:\n");
+  print_memstats (memstats ());
   struct memstats stats = gc ();
-  printf("after GC:\n");
+  printf ("after GC:\n");
   print_memstats (stats);
   return q_nil;
 }
@@ -347,7 +428,7 @@ f_gc ()
 Lisp_Object
 f_memdump ()
 {
-  memdump();
+  memdump ();
   return q_nil;
 }
 

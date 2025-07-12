@@ -280,12 +280,6 @@ type_name (Lisp_Type t)
     }
 }
 
-static inline int
-eq (Lisp_Object x, Lisp_Object y)
-{
-  return x == y;
-}
-
 // builtins.c - builtin functions
 Lisp_Object f_cons (Lisp_Object car, Lisp_Object cdr);
 Lisp_Object f_setcar (Lisp_Object cons, Lisp_Object car);
@@ -315,7 +309,13 @@ Lisp_Object f_le (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_leq (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_progn (Lisp_Object form);
 Lisp_Object f_quote (Lisp_Object form);
-Lisp_Object f_let (Lisp_Object form); // plain let is useless in our implementation, it's a let*
+Lisp_Object f_let (Lisp_Object form); // it's really a let*
+Lisp_Object f_and (Lisp_Object form);
+Lisp_Object f_or (Lisp_Object form);
+Lisp_Object f_if (Lisp_Object form);
+Lisp_Object f_when (Lisp_Object form);
+Lisp_Object f_unless (Lisp_Object form);
+Lisp_Object f_cond (Lisp_Object form);
 Lisp_Object f_lambda (Lisp_Object form);
 Lisp_Object f_define (Lisp_Object form);
 Lisp_Object f_format (int argc, Lisp_Object *argv);
@@ -331,5 +331,19 @@ extern Lisp_Object v_obarray;
 extern Lisp_Object l_globalenv;
 
 void init_builtins ();
+
+// inlined helpers
+
+static inline int
+eq (Lisp_Object x, Lisp_Object y)
+{
+  return x == y;
+}
+
+static inline int
+nil (Lisp_Object o)
+{
+  return eq (o, q_nil);
+}
 
 #endif // LISP_H
