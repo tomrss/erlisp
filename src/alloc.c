@@ -517,16 +517,16 @@ memdump ()
   printf ("SMALL LAMBDA BLOCKS:\n");
   blkmemdump (all_smalllambda);
 
-  // TODO this breaks
-  /* printf ("VAR SIZE HEAP:\n"); */
-  /* int i = 0; */
-  /* struct varsizeblk *blk = varsizeheap; */
-  /* while (blk) */
-  /*   { */
-  /*     printf (" %3d: blk %p, next %p, obj %llu, %s\n", i, blk, blk->next, */
-  /*             blk->obj, type_name (type_of (blk->obj))); */
-  /*     blk = blk->next; */
-  /*   } */
+  printf ("VAR SIZE HEAP:\n");
+  int i = 0;
+  struct varsizeblk *blk = varsizeheap;
+  while (blk)
+    {
+      printf (" %3d: blk %-14p, next %-14p, obj %-14p, %s\n", i, blk, blk->next,
+              unbox_pointer(blk->obj), type_name (type_of (blk->obj)));
+      i++;
+      blk = blk->next;
+    }
 }
 
 static void
