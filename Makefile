@@ -1,8 +1,8 @@
 CC = gcc
 # if readline
 # TODO -02 optimizations
-CFLAGS = -Wall -Wextra -O0 -g -DHAVE_READLINE=1
-LFLAGS = -g -lreadline
+CFLAGS ?= -Wall -Wextra -O0 -g -DHAVE_READLINE=1
+LFLAGS ?= -g -lreadline
 # else (no readline): comment above, decomment this
 # CFLAGS = -Wall -Wextra -O2 -g
 # LFLAGS = -g
