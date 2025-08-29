@@ -280,7 +280,8 @@ type_name (Lisp_Type t)
     }
 }
 
-// builtins.c - builtin functions
+// builtins.c - builtin functions and globals
+
 Lisp_Object f_cons (Lisp_Object car, Lisp_Object cdr);
 Lisp_Object f_setcar (Lisp_Object cons, Lisp_Object car);
 Lisp_Object f_setcdr (Lisp_Object cons, Lisp_Object cdr);
@@ -323,7 +324,6 @@ Lisp_Object f_gc ();
 Lisp_Object f_memstats ();
 Lisp_Object f_memdump ();
 
-// init.c - lisp initialization and globals
 extern Lisp_Object q_nil;
 extern Lisp_Object q_t;
 extern Lisp_Object q_unbound;
