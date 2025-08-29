@@ -65,8 +65,6 @@ test_obarray_notfound ()
 
   int n = 1000;
 
-  Lisp_Object symbols[n];
-
   for (int i = 0; i < n; i++)
     {
       char buf[5];
@@ -85,7 +83,6 @@ test_obarray_notfound ()
                                  unbox_string (ua->name)->data);
       if (a != s)
         return TEST_RESULT_FAIL ("added different from input symbol");
-      symbols[i] = s;
     }
 
   for (int i = 0; i < n; i++)
