@@ -65,8 +65,8 @@ parse_sexp_from_tok (Lexer *l, Token tok)
 
         // fake string for lookup in obarray. we don't want to lisp
         // alloc it, it should not be managed and gc'd.
-        Lisp_String *s = malloc (sizeof (Lisp_String));
         int len = strlen (tok.string);
+        Lisp_String *s = malloc (len + sizeof (Lisp_String));
         strncpy (s->data, tok.string, len);
         s->size = len;
         Lisp_Object obsym = obarray_lookup_name (v_obarray, box_string(s));
