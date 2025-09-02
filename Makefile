@@ -2,10 +2,11 @@ CC = gcc
 # if readline
 # TODO -02 optimizations
 CFLAGS ?= -Wall -Wextra -O0 -g -DHAVE_READLINE=1
-LFLAGS ?= -g -lreadline
+LDFLAGS ?= -g
+LDLIBS ?= -lreadline
 # else (no readline): comment above, decomment this
 # CFLAGS = -Wall -Wextra -O2 -g
-# LFLAGS = -g
+# LDLIBS = 
 # endif
 SRC_DIR = src
 TEST_DIR = test
@@ -25,7 +26,7 @@ TEST_OBJECTS := $(patsubst $(TEST_DIR)/test_%.c,$(OBJ_DIR)/test_%.o,$(TEST_SOURC
 all: $(TARGET)
 
 $(TARGET): $(OBJECTS)
-	$(CC) $(LFLAGS) $(OBJECTS) -o $@
+	$(CC) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o $@
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -40,7 +41,7 @@ $(OBJ_DIR)/test_%.o: $(TEST_DIR)/test_%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 test_$(TARGET): $(OBJECTS_NOMAIN) $(TEST_OBJECTS)
-	$(CC) $(LFLAGS) $(OBJECTS_NOMAIN) $(TEST_OBJECTS) -o $(TEST_DIR)/test_$(TARGET)
+	$(CC) $(LDFLAGS) $(OBJECTS_NOMAIN) $(TEST_OBJECTS) $(LDLIBS) -o $(TEST_DIR)/test_$(TARGET)
 
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET) $(TEST_TARGET)
