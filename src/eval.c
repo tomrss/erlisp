@@ -114,9 +114,11 @@ call_function (Lisp_Object env, Lisp_Object form)
       lambda = unbox_lambda (fun);
       minargs = lambda->minargs;
       maxargs = lambda->maxargs;
-      char buf[30];
-      sprintf (buf, "lambda(%d, %d)", minargs, maxargs);
-      fname = buf;
+      {
+        char buf[30];
+        sprintf (buf, "lambda(%d, %d)", minargs, maxargs);
+        fname = buf;
+      }
       break;
     default:
       // TODO error
@@ -336,7 +338,7 @@ define (Lisp_Object env, Lisp_Object form)
 
   // set new env in the parent stack (the current is the one in which
   // "define" is evalled and will die afterwards
-  stack_parent_set_env(newenv);
+  stack_parent_set_env (newenv);
 
   return value;
 }
