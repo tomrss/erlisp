@@ -618,6 +618,8 @@ is_obj_unmarked (Lisp_Object obj)
       return is_vector_unmarked (unbox_vector (obj));
     case LISP_LMBD:
       return is_lambda_unmarked (unbox_lambda (obj));
+    default:
+      return -1;
     }
 }
 

@@ -31,6 +31,12 @@
 
 #define BOOL(expr) (expr) ? q_t : q_nil
 
+#ifdef __GNUC__
+#define UNUSED __attribute__((__unused__))
+#else /* __GNUC__ */
+#define UNUSED
+#endif /* __GNUC__ */
+
 typedef uint64_t Lisp_Object;
 
 typedef enum

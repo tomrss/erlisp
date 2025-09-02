@@ -1,4 +1,5 @@
 #include "lexer.h"
+#include "lisp.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,7 +50,7 @@ lex_init ()
   Lexer *l;
   l = malloc (sizeof (Lexer));
   l->line = 1;
-  l->token = (Token) {};
+  l->token = (Token){};
   return l;
 }
 
@@ -58,7 +59,7 @@ lex_set_stream (Lexer *l, Stream *s)
 {
   l->stream = s;
   l->line = 1;
-  l->token = (Token) {};
+  l->token = (Token){};
 }
 
 Token
@@ -326,6 +327,8 @@ lex_token_type (TokenType tt)
       return "EOF";
     case TOK_ERROR:
       return "ERROR";
+    default:
+      return NULL;
     }
 }
 
@@ -350,7 +353,7 @@ stream_string_getc (Stream *s)
 }
 
 static int
-stream_string_ungetc (int _, Stream *s)
+stream_string_ungetc (UNUSED int _, Stream *s)
 {
   if (s->source.string.pos < 1)
     return 0;

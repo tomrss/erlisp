@@ -30,10 +30,11 @@ print_form (Lisp_Object form)
   switch (type_of (form))
     {
     case LISP_INTG:
-      printf ("%lld", unbox_int (form));
+      printf ("%ld", unbox_int (form));
       break;
     case LISP_STRG:
-      printf ("\"%.*s\"", (int) unbox_string (form)->size, unbox_string (form)->data);
+      printf ("\"%.*s\"", (int)unbox_string (form)->size,
+              unbox_string (form)->data);
       break;
     case LISP_VECT:
       printf ("[size:%zu]", unbox_vector (form)->size);
@@ -68,7 +69,7 @@ debug_print_form (Lisp_Object form)
 }
 #else  /* DEBUG_PRINT */
 void
-debug_print_form (Lisp_Object _)
+debug_print_form (UNUSED Lisp_Object _)
 {
 }
 #endif /* DEBUG_PRINT */
@@ -84,7 +85,7 @@ debug_printf (const char *fmt, ...)
 }
 #else  /* DEBUG_PRINT */
 void
-debug_printf (const char *_, ...)
+debug_printf (UNUSED const char *_, ...)
 {
 }
 #endif /* DEBUG_PRINT */
