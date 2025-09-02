@@ -17,4 +17,4 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Test
-        run: CFLAGS="-Wall -Wextra -O0 -g" LFLAGS=-g make test
+        run: CFLAGS="-Wall -Wextra -O0 -g" LDLIBS= make test
