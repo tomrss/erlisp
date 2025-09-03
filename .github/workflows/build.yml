@@ -1,20 +1,79 @@
-name: Test
+name: Build
 
 on:
   workflow_dispatch:
   push:
 
 jobs:
-  test:
-    name: Test
+  build-linux:
+    name: Build Linux
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        arch:
+          - x86_64
+          # TODO this fails in linking readline, fix this
+          # - aarch64
     permissions:
       contents: read
-
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y \
+            build-essential \
+            gcc-aarch64-linux-gnu \
+            libreadline-dev
+          # dirty trick to avoid conditionals in build step (x86_64 is native gcc)
+          sudo ln -sf /usr/bin/gcc /usr/local/bin/x86_64-linux-gnu-gcc
+
       - name: Test
-        run: CFLAGS="-Wall -Wextra -O0 -g" LDLIBS= make test
+        env:
+          CC: ${{ matrix.arch }}-linux-gnu-gcc
+        run: make clean test
+
+      - name: Build
+        env:
+          CC: ${{ matrix.arch }}-linux-gnu-gcc
+        run: make clean all
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: erlisp-linux-${{ matrix.arch }}
+          path: erlisp
+
+  build-macos:
+    name: Build MacOS
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch:
+          - x86_64
+          - arm64
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install build dependencies
+        run: brew install llvm
+
+      - name: Test
+        env:
+          CC: clang -arch ${{ matrix.arch }}
+        run: make clean test
+
+      - name: Build
+        env:
+          CC: clang -arch ${{ matrix.arch }}
+        run: make clean all
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: erlisp-macos-${{ matrix.arch }}
+          path: erlisp

@@ -1,4 +1,4 @@
-CC = gcc
+CC ?= gcc
 # if readline
 # TODO -02 optimizations
 CFLAGS ?= -Wall -Wextra -O0 -g -DHAVE_READLINE=1
