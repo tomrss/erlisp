@@ -30,7 +30,7 @@ print_form (Lisp_Object form)
   switch (type_of (form))
     {
     case LISP_INTG:
-      printf ("%ld", unbox_int (form));
+      printf ("%ld", (long)unbox_int (form));
       break;
     case LISP_STRG:
       printf ("\"%.*s\"", (int)unbox_string (form)->size,
