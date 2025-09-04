@@ -1,5 +1,4 @@
 #include "blkalloc.h"
-#include "lisp.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
