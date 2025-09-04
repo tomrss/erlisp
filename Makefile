@@ -1,13 +1,8 @@
 CC ?= gcc
-# if readline
 # TODO -02 optimizations
-CFLAGS ?= -Wall -Wextra -O0 -g -DHAVE_READLINE=1
-LDFLAGS ?= -g
+CFLAGS ?= -Wall -Wextra -O0 -DHAVE_READLINE=1
+LDFLAGS ?=
 LDLIBS ?= -lreadline
-# else (no readline): comment above, decomment this
-# CFLAGS = -Wall -Wextra -O2 -g
-# LDLIBS = 
-# endif
 SRC_DIR = src
 TEST_DIR = test
 OBJ_DIR = obj
@@ -21,9 +16,14 @@ TEST_SOURCES := $(wildcard $(TEST_DIR)/*.c)
 TEST_OBJECTS := $(patsubst $(TEST_DIR)/test_%.c,$(OBJ_DIR)/test_%.o,$(TEST_SOURCES))
 
 
-.PHONY: all clean test run
+.PHONY: all debug clean test run
 
 all: $(TARGET)
+
+debug: CFLAGS += -g -fsanitize=address
+debug: LDFLAGS += -g
+debug: LDLIBS += -fsanitize=address
+debug: $(TARGET)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o $@
