@@ -388,7 +388,9 @@ test_eval_signal ()
       subrprogn,
       f_cons (definef1, f_cons (definef2, f_cons (f_cons (f2sym, q_nil), q_nil))));
 
-  Lisp_Object err = condition_case_2 (eval, l_globalenv, form);
+  Lisp_Object err;
+  int success = condition_case_2 (eval, l_globalenv, form, &err);
+  TEST_ASSERT (!success, "expected form to signal error");
   TEST_CHECK_TYPE ("error", err, LISP_CONS);
 
   TEST_ASSERT (eq (f_error_symbol (err), err1sym),

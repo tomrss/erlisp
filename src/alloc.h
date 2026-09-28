@@ -5,16 +5,8 @@
 #include "lisp.h"
 #include <stddef.h>
 
-#define STACKSIZE 1024
-
 #define DEFSUBR(name, minargs, maxargs, fun)                                  \
   defsubr (name, minargs, maxargs, NSUBR (maxargs, fun))
-
-struct stackframe
-{
-  const char *fname;
-  Lisp_Object env;
-};
 
 struct memstats
 {
@@ -27,14 +19,6 @@ struct memstats
   unsigned long int varsizeheaplength;
   size_t varsizeheapsize;
 };
-
-void stack_push (struct stackframe sf);
-struct stackframe stack_pop ();
-struct stackframe stack_pop_free ();
-struct stackframe stack_current ();
-int stack_depth_current ();
-void stack_current_set_env (Lisp_Object env);
-void stack_parent_set_env (Lisp_Object env);
 
 Lisp_Object make_string (const char *s);
 Lisp_Object make_nstring (const char *s, size_t size);

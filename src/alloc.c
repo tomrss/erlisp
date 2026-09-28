@@ -17,9 +17,6 @@
 #define SMALL_LMBD_SIZE                                                       \
   (sizeof (Lisp_Lambda) + SMALL_LMBD_NARGS * sizeof (Lisp_Object))
 
-struct stackframe stack[STACKSIZE];
-int stackdepth = 0;
-
 blkallocator *all_cons;
 blkallocator *all_symbol;
 blkallocator *all_smallstring;
@@ -242,79 +239,6 @@ free_lisp_obj (Lisp_Object o)
     return;
 
   free (unbox_pointer (o));
-}
-
-void
-stack_push (struct stackframe sf)
-{
-  if (stackdepth >= STACKSIZE)
-    {
-      // TODO err
-      fprintf (stderr, "stack size exceeded: %d\n", STACKSIZE);
-      exit (9);
-    }
-
-  stack[stackdepth++] = sf;
-}
-
-struct stackframe
-stack_pop ()
-{
-  if (stackdepth <= 0)
-    {
-      // TODO err
-      fprintf (stderr, "already at beginning of stack\n");
-      exit (9);
-    }
-
-  return stack[--stackdepth];
-}
-
-struct stackframe
-stack_current ()
-{
-  return stack[stackdepth - 1];
-}
-
-int
-stack_depth_current ()
-{
-  return stackdepth;
-}
-
-void
-stack_parent_set_env (Lisp_Object env)
-{
-  int effind = stackdepth > 1 ? stackdepth - 2 : 0;
-
-  stack[effind].env = env;
-}
-
-void
-stack_current_set_env (Lisp_Object env)
-{
-  // TODO unmark gc?
-  stack[stackdepth - 1].env = env;
-}
-
-// TODO wtf is this function??
-struct stackframe
-stack_pop_free ()
-{
-  struct stackframe pop = stack_pop ();
-  /* struct stackframe cur = stack_current (); */
-
-  /* Lisp_Object tail = pop.env; */
-  /* Lisp_Object target = cur.env; */
-
-  // TODO we cannot really free as they are managed by gc
-  /* while (!eq (tail, target) && !eq (tail, q_nil)) */
-  /*   { */
-  /*     free_lisp_obj (f_car (tail)); */
-  /*     tail = f_cdr (tail); */
-  /*   } */
-
-  return pop;
 }
 
 struct memstats

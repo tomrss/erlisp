@@ -9,6 +9,76 @@
 #include "lisp.h"
 #include "obarray.h"
 
+struct stackframe stack[STACKSIZE];
+int stackdepth = 0;
+
+void
+stack_push (struct stackframe sf)
+{
+  if (stackdepth >= STACKSIZE)
+    {
+      // TODO err
+      fprintf (stderr, "stack size exceeded: %d\n", STACKSIZE);
+      exit (9);
+    }
+
+  stack[stackdepth++] = sf;
+}
+
+struct stackframe
+stack_pop ()
+{
+  if (stackdepth <= 0)
+    {
+      // TODO err
+      fprintf (stderr, "already at beginning of stack\n");
+      exit (9);
+    }
+
+  return stack[--stackdepth];
+}
+
+struct stackframe
+stack_current ()
+{
+  return stack[stackdepth - 1];
+}
+
+void
+stack_parent_set_env (Lisp_Object env)
+{
+  int effind = stackdepth > 1 ? stackdepth - 2 : 0;
+
+  stack[effind].env = env;
+}
+
+void
+stack_current_set_env (Lisp_Object env)
+{
+  // TODO unmark gc?
+  stack[stackdepth - 1].env = env;
+}
+
+// TODO wtf is this function??
+struct stackframe
+stack_pop_free ()
+{
+  struct stackframe pop = stack_pop ();
+  /* struct stackframe cur = stack_current (); */
+
+  /* Lisp_Object tail = pop.env; */
+  /* Lisp_Object target = cur.env; */
+
+  // TODO we cannot really free as they are managed by gc
+  /* while (!eq (tail, target) && !eq (tail, q_nil)) */
+  /*   { */
+  /*     free_lisp_obj (f_car (tail)); */
+  /*     tail = f_cdr (tail); */
+  /*   } */
+
+  return pop;
+}
+
 // TODO this number is completely random
 #define HANDLERSIZE 512
 struct handler
@@ -401,7 +471,7 @@ xsignal (Lisp_Object symbol, Lisp_Object data)
   Lisp_Object tail = q_nil;
 
   // unwind the stack
-  while (stack_depth_current () > h->stackind)
+  while (stackdepth > h->stackind)
     {
       struct stackframe sf = stack_pop ();
       Lisp_Object cell = f_cons (make_string (sf.fname), q_nil);
@@ -423,7 +493,7 @@ xsignal (Lisp_Object symbol, Lisp_Object data)
 int
 condition_case_0 (Lisp_Object (*fun) (), Lisp_Object *out)
 {
-  struct handler *h = push_handler (stack_depth_current ());
+  struct handler *h = push_handler (stackdepth);
 
   if (setjmp (h->jmp))
     {
@@ -443,7 +513,7 @@ int
 condition_case_1 (Lisp_Object (*fun) (Lisp_Object), Lisp_Object arg1,
                   Lisp_Object *out)
 {
-  struct handler *h = push_handler (stack_depth_current ());
+  struct handler *h = push_handler (stackdepth);
 
   if (setjmp (h->jmp))
     {
@@ -463,7 +533,7 @@ int
 condition_case_2 (Lisp_Object (*fun) (Lisp_Object, Lisp_Object),
                   Lisp_Object arg1, Lisp_Object arg2, Lisp_Object *out)
 {
-  struct handler *h = push_handler (stack_depth_current ());
+  struct handler *h = push_handler (stackdepth);
 
   if (setjmp (h->jmp))
     {
@@ -483,7 +553,7 @@ int
 condition_case_n (Lisp_Object (*fun) (int, Lisp_Object *), int nargs,
                   Lisp_Object *args, Lisp_Object *out)
 {
-  struct handler *h = push_handler (stack_depth_current ());
+  struct handler *h = push_handler (stackdepth);
 
   if (setjmp (h->jmp))
     {

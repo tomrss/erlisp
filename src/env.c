@@ -1,5 +1,6 @@
 #include "env.h"
 #include "alloc.h"
+#include "eval.h"
 #include "lisp.h"
 #include <stdio.h>
 
