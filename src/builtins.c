@@ -9,6 +9,8 @@
 Lisp_Object q_nil;
 Lisp_Object q_t;
 Lisp_Object q_unbound;
+Lisp_Object q_error;
+Lisp_Object q_error_maxhandlerdepth;
 Lisp_Object v_obarray;
 Lisp_Object l_globalenv;
 
@@ -88,6 +90,18 @@ f_cdr (Lisp_Object cons)
 
   return unbox_cons (cons)->cdr;
   // TODO type safety
+}
+
+Lisp_Object
+f_cadr (Lisp_Object cons)
+{
+  return f_car (f_cdr (cons));
+}
+
+Lisp_Object
+f_cddr (Lisp_Object cons)
+{
+  return f_cdr (f_cdr (cons));
 }
 
 Lisp_Object
@@ -436,8 +450,7 @@ f_load (Lisp_Object path)
       exit (2);
     }
 
-  Stream *s = stream_file (f);
-  Lexer *l = lex_init (s);
+  Lexer *l = lex_init (stream_file (f));
 
   Lisp_Object form;
   while (parse_next_sexp (l, &form))
@@ -448,11 +461,37 @@ f_load (Lisp_Object path)
   lex_close (l);
   fclose (f);
 
-  // propagate environment to parent, otherwise definitions in loaded file would be lost
+  // propagate environment to parent, otherwise definitions in loaded file
+  // would be lost
   stack_parent_set_env (env_current ());
 
   // TODO all errors not handled yet
   return q_t;
+}
+
+Lisp_Object
+f_signal (Lisp_Object symbol, Lisp_Object data)
+{
+  xsignal (symbol, data);
+  return q_nil;
+}
+
+Lisp_Object
+f_error_symbol (Lisp_Object err)
+{
+  return f_car (err);
+}
+
+Lisp_Object
+f_error_backtrace (Lisp_Object err)
+{
+  return f_cadr (err);
+}
+
+Lisp_Object
+f_error_data (Lisp_Object err)
+{
+  return f_cddr (err);
 }
 
 Lisp_Object
@@ -487,6 +526,8 @@ init_builtins ()
   q_unbound = make_nstr_symbol ("unbound", 7);
   q_nil = make_nstr_symbol ("nil", 3);
   q_t = make_nstr_symbol ("t", 1);
+  q_error = make_nstr_symbol ("error", 5);
+  q_error_maxhandlerdepth = make_nstr_symbol ("max-handler-depth", 17);
 
   v_obarray = obarray_init ();
   obarray_register_builtins (v_obarray);
@@ -511,6 +552,8 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("symbol_value", 1, 1, f_symbol_value));
   obarray_put (o, DEFSUBR ("car", 1, 1, f_car));
   obarray_put (o, DEFSUBR ("cdr", 1, 1, f_cdr));
+  obarray_put (o, DEFSUBR ("cadr", 1, 1, f_cdr));
+  obarray_put (o, DEFSUBR ("cddr", 1, 1, f_cdr));
   obarray_put (o, DEFSUBR ("eq?", 2, 2, f_eq_p));
   obarray_put (o, DEFSUBR ("equal?", 2, 2, f_equal_p));
   obarray_put (o, DEFSUBR ("eval", 1, 1, f_eval));
@@ -543,6 +586,10 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
   obarray_put (o, DEFSUBR ("format", 2, MANY, f_format));
   obarray_put (o, DEFSUBR ("load", 1, 1, f_load));
+  obarray_put (o, DEFSUBR ("signal", 1, 2, f_signal));
+  obarray_put (o, DEFSUBR ("error-symbol", 1, 1, f_error_symbol));
+  obarray_put (o, DEFSUBR ("error-backtrace", 1, 1, f_error_backtrace));
+  obarray_put (o, DEFSUBR ("error-data", 1, 1, f_error_data));
   obarray_put (o, DEFSUBR ("gc", 0, 0, f_gc));
   obarray_put (o, DEFSUBR ("memstats", 0, 0, f_memstats));
   obarray_put (o, DEFSUBR ("memdump", 0, 0, f_memdump));

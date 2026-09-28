@@ -25,7 +25,6 @@ main (int argc, char **argv)
       // repl
 
       Lexer *l;
-      Stream *s;
       Lisp_Object prog;
       Lisp_Object res;
       char *line = NULL;
@@ -63,14 +62,20 @@ main (int argc, char **argv)
               free (line);
               break;
             }
-          s = stream_string (line, lenline);
-          l = lex_init(s);
+          l = lex_init (stream_string (line, lenline));
 
-          prog = parse_sexp(l);
-          res = eval (env_current(), prog);
-          print_form (res);
-          printf ("\n");
-          gc();
+          prog = parse_sexp (l);
+          if (safe_eval (env_current (), prog, &res))
+            {
+              print_form (res);
+              printf ("\n");
+            }
+          else
+            {
+              print_error (res);
+            }
+
+          gc ();
 
           lex_close (l);
           linum++;
@@ -82,8 +87,8 @@ main (int argc, char **argv)
 
   // parse and eval file
 
-  Lisp_Object filename = make_string(argv[1]);
-  f_load(filename);
+  Lisp_Object filename = make_string (argv[1]);
+  f_load (filename);
 
   return 0;
 }

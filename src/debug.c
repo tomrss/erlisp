@@ -61,6 +61,25 @@ print_form (Lisp_Object form)
     }
 }
 
+void
+print_error (Lisp_Object err)
+{
+  Lisp_Symbol *sym = unbox_symbol (f_error_symbol (err));
+  Lisp_String *data = unbox_string (f_error_data (err));
+  fprintf (stderr, "%s: %s\n", unbox_string (sym->name)->data, data->data);
+
+  Lisp_Object backtrace = f_error_backtrace (err);
+  Lisp_Object tail = backtrace;
+
+  fprintf (stderr, "Backtrace:\n");
+  while (!eq (tail, q_nil))
+    {
+      const char *fname = unbox_string (f_car (tail))->data;
+      fprintf (stderr, " at %s\n", fname);
+      tail = f_cdr (tail);
+    }
+}
+
 #ifdef DEBUG_PRINT
 void
 debug_print_form (Lisp_Object form)

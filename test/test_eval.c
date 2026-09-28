@@ -22,6 +22,7 @@ static TestResult test_eval_progn ();
 static TestResult test_eval_progn_single ();
 static TestResult test_eval_quote ();
 static TestResult test_eval_load ();
+static TestResult test_eval_signal ();
 
 static TestCase test_eval_cases[] = {
   { .skip = 0, .name = "symbol", .run = test_eval_symbol },
@@ -38,6 +39,7 @@ static TestCase test_eval_cases[] = {
   { .skip = 0, .name = "progn single", .run = test_eval_progn_single },
   { .skip = 0, .name = "quote", .run = test_eval_quote },
   { .skip = 0, .name = "load", .run = test_eval_load },
+  { .skip = 0, .name = "signal", .run = test_eval_signal },
   {}, // terminator
 };
 
@@ -102,7 +104,7 @@ static TestResult
 test_eval_nil ()
 {
   Lisp_Object res = eval (l_globalenv, q_nil);
-  TEST_ASSERT (eq(res, q_nil), "expected nil to eval to nil");
+  TEST_ASSERT (eq (res, q_nil), "expected nil to eval to nil");
   return TEST_RESULT_SUCCESS;
 }
 
@@ -110,7 +112,7 @@ static TestResult
 test_eval_t ()
 {
   Lisp_Object res = eval (l_globalenv, q_t);
-  TEST_ASSERT (eq(res, q_t), "expected t to eval to t");
+  TEST_ASSERT (eq (res, q_t), "expected t to eval to t");
   return TEST_RESULT_SUCCESS;
 }
 
@@ -136,7 +138,8 @@ test_eval_subr_equal ()
 static TestResult
 test_eval_subr_strlen ()
 {
-  Lisp_Object subr = make_subr ("string-length", 1, 1, NSUBR (1, f_string_length));
+  Lisp_Object subr
+      = make_subr ("string-length", 1, 1, NSUBR (1, f_string_length));
   Lisp_Object subrsymb = make_str_symbol ("string-length");
   Lisp_Object teststr = make_nstring ("test", 4);
   unbox_symbol (subrsymb)->value = subr;
@@ -334,6 +337,91 @@ test_eval_load ()
   if (unbox_int (defval) != 7)
     return TEST_RESULT_FAIL ("expected load-test-define to be 7, got %ld",
                              unbox_int (defval));
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_eval_signal ()
+{
+  /*
+    (progn
+      (define f1 (lambda () (signal 'err1 "my error")))
+      (define f2 (lambda () (f1)))
+      (f2))
+   */
+  Lisp_Object subrprogn = obarray_lookup_name (v_obarray, make_string ("progn"));
+  Lisp_Object subrquote = obarray_lookup_name (v_obarray, make_string ("quote"));
+  Lisp_Object subrlambda
+      = obarray_lookup_name (v_obarray, make_string ("lambda"));
+  Lisp_Object subrdefine
+      = obarray_lookup_name (v_obarray, make_string ("define"));
+  Lisp_Object subrsignal
+      = obarray_lookup_name (v_obarray, make_string ("signal"));
+
+  Lisp_Object f1sym = make_str_symbol ("f1");
+  Lisp_Object f2sym = make_str_symbol ("f2");
+  Lisp_Object err1sym = make_str_symbol ("err1");
+
+  // (signal 'err1 "my error")
+  Lisp_Object callsignal = f_cons (
+      subrsignal,
+      f_cons (f_cons (subrquote, f_cons (err1sym, q_nil)),
+              f_cons (make_string ("my error"), q_nil)));
+  // (define f1 (lambda () (signal 'err1 "my error")))
+  Lisp_Object definef1 = f_cons (
+      subrdefine,
+      f_cons (f1sym,
+              f_cons (f_cons (subrlambda,
+                              f_cons (q_nil, f_cons (callsignal, q_nil))),
+                      q_nil)));
+  // (define f2 (lambda () (f1)))
+  Lisp_Object definef2 = f_cons (
+      subrdefine,
+      f_cons (f2sym,
+              f_cons (f_cons (subrlambda,
+                              f_cons (q_nil,
+                                      f_cons (f_cons (f1sym, q_nil), q_nil))),
+                      q_nil)));
+
+  Lisp_Object form = f_cons (
+      subrprogn,
+      f_cons (definef1, f_cons (definef2, f_cons (f_cons (f2sym, q_nil), q_nil))));
+
+  Lisp_Object err = condition_case_2 (eval, l_globalenv, form);
+  TEST_CHECK_TYPE ("error", err, LISP_CONS);
+
+  TEST_ASSERT (eq (f_error_symbol (err), err1sym),
+               "expected error symbol to be err1");
+
+  // frames are collected from the innermost one
+  const char *expected[] = { "signal", "f1", "f2",
+                             "progn" };
+  int nexpected = sizeof (expected) / sizeof (expected[0]);
+
+  Lisp_Object backtrace = f_error_backtrace (err);
+  TEST_CHECK_TYPE ("backtrace", backtrace, LISP_CONS);
+  TEST_ASSERT (unbox_int (f_length (backtrace)) == nexpected,
+               "expected backtrace of %d frames, got %ld", nexpected,
+               unbox_int (f_length (backtrace)));
+
+  Lisp_Object tail = backtrace;
+  for (int i = 0; i < nexpected; i++)
+    {
+      Lisp_Object frame = f_car (tail);
+      TEST_CHECK_TYPE ("backtrace frame", frame, LISP_STRG);
+      TEST_ASSERT (eq (f_string_equal_p (frame, make_string (expected[i])),
+                       q_t),
+                   "expected frame %d to be '%s', got '%s'", i, expected[i],
+                   unbox_string (frame)->data);
+      tail = f_cdr (tail);
+    }
+
+  Lisp_Object data = f_error_data (err);
+  TEST_CHECK_TYPE ("data", data, LISP_STRG);
+  TEST_ASSERT (eq (f_string_equal_p (data, make_string ("my error")), q_t),
+               "expected data to be 'my error', got '%s'",
+               unbox_string (data)->data);
 
   return TEST_RESULT_SUCCESS;
 }

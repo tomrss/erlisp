@@ -32,6 +32,7 @@ void stack_push (struct stackframe sf);
 struct stackframe stack_pop ();
 struct stackframe stack_pop_free ();
 struct stackframe stack_current ();
+int stack_depth_current ();
 void stack_current_set_env (Lisp_Object env);
 void stack_parent_set_env (Lisp_Object env);
 

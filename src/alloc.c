@@ -276,6 +276,12 @@ stack_current ()
   return stack[stackdepth - 1];
 }
 
+int
+stack_depth_current ()
+{
+  return stackdepth;
+}
+
 void
 stack_parent_set_env (Lisp_Object env)
 {
@@ -291,6 +297,7 @@ stack_current_set_env (Lisp_Object env)
   stack[stackdepth - 1].env = env;
 }
 
+// TODO wtf is this function??
 struct stackframe
 stack_pop_free ()
 {

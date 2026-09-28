@@ -1,9 +1,48 @@
-#include "eval.h"
+#include <setjmp.h>
+#include <stdio.h>
+
 #include "alloc.h"
 #include "debug.h"
 #include "env.h"
+#include "eval.h"
 #include "lisp.h"
 #include "obarray.h"
+
+// TODO this number is completely random
+#define HANDLERSIZE 512
+struct handler
+{
+  jmp_buf jmp;
+  int stackind;
+  Lisp_Object error;
+};
+
+static struct handler handlers[HANDLERSIZE];
+static int handlerdepth = 0;
+
+struct handler *
+push_handler (int stackind)
+{
+  if (handlerdepth >= HANDLERSIZE)
+    xsignal (q_error_maxhandlerdepth, box_int (HANDLERSIZE));
+
+  struct handler *h = &handlers[handlerdepth++];
+  h->error = q_nil;
+  h->stackind = stackind;
+  return h;
+}
+
+struct handler *
+current_handler ()
+{
+  return &handlers[handlerdepth - 1];
+}
+
+struct handler *
+pop_handler ()
+{
+  return &handlers[--handlerdepth];
+}
 
 Lisp_Object
 eval (Lisp_Object env, Lisp_Object form)
@@ -114,11 +153,7 @@ call_function (Lisp_Object env, Lisp_Object form)
       lambda = unbox_lambda (fun);
       minargs = lambda->minargs;
       maxargs = lambda->maxargs;
-      {
-        char buf[30];
-        sprintf (buf, "lambda(%d, %d)", minargs, maxargs);
-        fname = buf;
-      }
+      fname = unbox_string (unbox_symbol (funsym)->name)->data;
       break;
     default:
       // TODO error
@@ -342,4 +377,131 @@ define (Lisp_Object env, Lisp_Object form)
   stack_parent_set_env (newenv);
 
   return value;
+}
+
+// maybe this is also useful somewhere else?
+static Lisp_Object
+make_error (Lisp_Object symbol, Lisp_Object data, Lisp_Object backtrace)
+{
+  return f_cons (symbol, f_cons (backtrace, data));
+}
+
+void
+xsignal (Lisp_Object symbol, Lisp_Object data)
+{
+  if (handlerdepth == 0)
+    {
+      // no handler: no setjmp, using longjmp would have undefined behaviour
+      print_error (make_error (symbol, data, q_nil));
+      exit (1);
+    }
+
+  struct handler *h = current_handler ();
+
+  Lisp_Object backtrace = q_nil;
+  Lisp_Object tail = q_nil;
+
+  // unwind the stack
+  while (stack_depth_current () > h->stackind)
+    {
+      struct stackframe sf = stack_pop ();
+      Lisp_Object cell = f_cons (make_string (sf.fname), q_nil);
+
+      if (eq (backtrace, q_nil))
+        backtrace = cell;
+      else
+        f_setcdr (tail, cell);
+
+      tail = cell;
+    }
+
+  Lisp_Object err = make_error (symbol, data, backtrace);
+  h->error = err;
+
+  longjmp (h->jmp, 1);
+}
+
+int
+condition_case_0 (Lisp_Object (*fun) (), Lisp_Object *out)
+{
+  struct handler *h = push_handler (stack_depth_current ());
+
+  if (setjmp (h->jmp))
+    {
+      *out = h->error;
+      pop_handler ();
+      return 0;
+    }
+  else
+    {
+      *out = fun ();
+      pop_handler ();
+      return 1;
+    }
+}
+
+int
+condition_case_1 (Lisp_Object (*fun) (Lisp_Object), Lisp_Object arg1,
+                  Lisp_Object *out)
+{
+  struct handler *h = push_handler (stack_depth_current ());
+
+  if (setjmp (h->jmp))
+    {
+      *out = h->error;
+      pop_handler ();
+      return 0;
+    }
+  else
+    {
+      *out = fun (arg1);
+      pop_handler ();
+      return 1;
+    }
+}
+
+int
+condition_case_2 (Lisp_Object (*fun) (Lisp_Object, Lisp_Object),
+                  Lisp_Object arg1, Lisp_Object arg2, Lisp_Object *out)
+{
+  struct handler *h = push_handler (stack_depth_current ());
+
+  if (setjmp (h->jmp))
+    {
+      *out = h->error;
+      pop_handler ();
+      return 0;
+    }
+  else
+    {
+      *out = fun (arg1, arg2);
+      pop_handler ();
+      return 1;
+    }
+}
+
+int
+condition_case_n (Lisp_Object (*fun) (int, Lisp_Object *), int nargs,
+                  Lisp_Object *args, Lisp_Object *out)
+{
+  struct handler *h = push_handler (stack_depth_current ());
+
+  if (setjmp (h->jmp))
+    {
+      *out = h->error;
+      pop_handler ();
+      return 0;
+    }
+  else
+    {
+      *out = fun (nargs, args);
+      pop_handler ();
+      return 1;
+    }
+}
+
+int
+safe_eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out)
+{
+  return condition_case_2 (eval, env, form, out);
 }
