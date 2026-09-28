@@ -1,3 +1,4 @@
+#include <alloca.h>
 #include <setjmp.h>
 #include <stdio.h>
 
@@ -208,7 +209,7 @@ call_function (Lisp_Object env, Lisp_Object form)
     }
 
   // FIXME: argvals are never collected by gc...
-  Lisp_Object *argvals = malloc (arity * sizeof (Lisp_Object));
+  Lisp_Object *argvals = alloca (arity * sizeof (Lisp_Object));
   Lisp_Object argtail = funargs;
 
   for (int i = 0; i < arity; i++)
@@ -228,8 +229,6 @@ call_function (Lisp_Object env, Lisp_Object form)
     result = call_subr (subr, maxargs, arity, argvals);
   else // is lambda
     result = call_lambda (env, lambda, argvals);
-
-  free (argvals);
 
   stack_pop_free ();
 
