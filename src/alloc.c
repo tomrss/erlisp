@@ -126,8 +126,8 @@ make_nstring (const char *s, size_t size)
     }
   else
     {
-      // allocate in variable sized heap
-      size_t allocsize = sizeof (Lisp_String) + size * sizeof (char);
+      // allocate in variable sized heap (+1 for terminator)
+      size_t allocsize = sizeof (Lisp_String) + (size + 1) * sizeof (char);
       string = malloc (allocsize);
       struct varsizeblk *blk = malloc (sizeof (struct varsizeblk));
       blk->obj = box_string (string);
@@ -140,6 +140,8 @@ make_nstring (const char *s, size_t size)
   string->gcmark = 0;
   string->size = size;
   strncpy (string->data, s, size);
+  // not counted in size
+  string->data[size] = '\0';
 
   return box_string (string);
 }
