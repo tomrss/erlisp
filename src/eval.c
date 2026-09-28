@@ -172,6 +172,7 @@ call_function (Lisp_Object env, Lisp_Object form)
       arity = maxargs;
     }
 
+  // FIXME: argvals are never collected by gc...
   Lisp_Object *argvals = malloc (arity * sizeof (Lisp_Object));
   Lisp_Object argtail = funargs;
 
