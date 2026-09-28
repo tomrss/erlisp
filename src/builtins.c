@@ -227,7 +227,7 @@ Lisp_Object
 f_subtract (int argc, Lisp_Object *argv)
 {
   // TODO type safety
-  Lisp_Integer accu = argv[0];
+  Lisp_Integer accu = unbox_int (argv[0]);
   for (int i = 1; i < argc; i++)
     accu -= unbox_int (argv[i]);
   return box_int (accu);
@@ -247,7 +247,7 @@ Lisp_Object
 f_divide (int argc, Lisp_Object *argv)
 {
   // TODO type safety
-  Lisp_Integer accu = argv[0];
+  Lisp_Integer accu = unbox_int (argv[0]);
   for (int i = 1; i < argc; i++)
     accu /= unbox_int (argv[i]);
   return box_int (accu);
