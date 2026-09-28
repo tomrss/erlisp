@@ -18,7 +18,7 @@
   (sizeof (Lisp_Lambda) + SMALL_LMBD_NARGS * sizeof (Lisp_Object))
 
 struct stackframe stack[STACKSIZE];
-int stackind = 0;
+int stackdepth = 0;
 
 blkallocator *all_cons;
 blkallocator *all_symbol;
@@ -247,39 +247,39 @@ free_lisp_obj (Lisp_Object o)
 void
 stack_push (struct stackframe sf)
 {
-  if (stackind >= STACKSIZE)
+  if (stackdepth >= STACKSIZE)
     {
       // TODO err
       fprintf (stderr, "stack size exceeded: %d\n", STACKSIZE);
       exit (9);
     }
 
-  stack[++stackind] = sf;
+  stack[stackdepth++] = sf;
 }
 
 struct stackframe
 stack_pop ()
 {
-  if (stackind < 0)
+  if (stackdepth <= 0)
     {
       // TODO err
       fprintf (stderr, "already at beginning of stack\n");
       exit (9);
     }
 
-  return stack[--stackind];
+  return stack[--stackdepth];
 }
 
 struct stackframe
 stack_current ()
 {
-  return stack[stackind];
+  return stack[stackdepth - 1];
 }
 
 void
 stack_parent_set_env (Lisp_Object env)
 {
-  int effind = stackind > 0 ? stackind - 1 : 0;
+  int effind = stackdepth > 1 ? stackdepth - 2 : 0;
 
   stack[effind].env = env;
 }
@@ -288,7 +288,7 @@ void
 stack_current_set_env (Lisp_Object env)
 {
   // TODO unmark gc?
-  stack[stackind].env = env;
+  stack[stackdepth - 1].env = env;
 }
 
 struct stackframe
