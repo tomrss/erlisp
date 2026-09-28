@@ -45,21 +45,14 @@ stream_close (Stream *s)
 }
 
 Lexer *
-lex_init ()
+lex_init (Stream *s)
 {
   Lexer *l;
   l = malloc (sizeof (Lexer));
   l->line = 1;
   l->token = (Token){};
-  return l;
-}
-
-void
-lex_set_stream (Lexer *l, Stream *s)
-{
   l->stream = s;
-  l->line = 1;
-  l->token = (Token){};
+  return l;
 }
 
 Token
@@ -127,6 +120,13 @@ lex_next (Lexer *l)
   tok.line = line;
 
   return tok;
+}
+
+void
+lex_close (Lexer *l)
+{
+  stream_close (l->stream);
+  free (l);
 }
 
 static int

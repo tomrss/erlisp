@@ -3,6 +3,7 @@
 #include "../src/env.h"
 #include "../src/eval.h"
 #include "../src/lisp.h"
+#include "../src/obarray.h"
 #include "test_lib.h"
 #include <stdio.h>
 
@@ -20,6 +21,7 @@ static TestResult test_eval_lambda_nested ();
 static TestResult test_eval_progn ();
 static TestResult test_eval_progn_single ();
 static TestResult test_eval_quote ();
+static TestResult test_eval_load ();
 
 static TestCase test_eval_cases[] = {
   { .skip = 0, .name = "symbol", .run = test_eval_symbol },
@@ -35,6 +37,7 @@ static TestCase test_eval_cases[] = {
   { .skip = 0, .name = "progn", .run = test_eval_progn },
   { .skip = 0, .name = "progn single", .run = test_eval_progn_single },
   { .skip = 0, .name = "quote", .run = test_eval_quote },
+  { .skip = 0, .name = "load", .run = test_eval_load },
   {}, // terminator
 };
 
@@ -298,6 +301,39 @@ test_eval_quote ()
   Lisp_Object result = progn (l_globalenv, form);
   debug_print_form (result);
   TEST_CHECK_TYPE ("quoted", form, LISP_CONS);
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_eval_load ()
+{
+  // interned, so the parser resolves load-test-cell to this symbol
+  Lisp_Object cell = make_cons (box_int (0), q_nil);
+  Lisp_Object symb = make_str_symbol ("load-test-cell");
+  unbox_symbol (symb)->value = cell;
+  obarray_put (v_obarray, symb);
+
+  Lisp_Object res = f_load (make_string ("test/assets/src-load.tl"));
+  TEST_ASSERT (eq (res, q_t), "expected load to return t");
+
+  // the second form reads the value set by the first one
+  Lisp_Object car = f_car (cell);
+  TEST_CHECK_TYPE ("load-test-cell car", car, LISP_INTG);
+  if (unbox_int (car) != 42)
+    return TEST_RESULT_FAIL ("expected car to be 42, got %ld",
+                             unbox_int (car));
+
+  // the define in the loaded file must be propagated to the caller env
+  Lisp_Object defsymb
+      = env_lookup_name (env_current (), make_string ("load-test-define"));
+  TEST_ASSERT (!eq (defsymb, q_nil),
+               "expected load-test-define to be bound after load");
+  Lisp_Object defval = unbox_symbol (defsymb)->value;
+  TEST_CHECK_TYPE ("load-test-define value", defval, LISP_INTG);
+  if (unbox_int (defval) != 7)
+    return TEST_RESULT_FAIL ("expected load-test-define to be 7, got %ld",
+                             unbox_int (defval));
 
   return TEST_RESULT_SUCCESS;
 }

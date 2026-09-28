@@ -1,8 +1,10 @@
 #include "alloc.h"
 #include "env.h"
 #include "eval.h"
+#include "lexer.h"
 #include "lisp.h"
 #include "obarray.h"
+#include "parser.h"
 
 Lisp_Object q_nil;
 Lisp_Object q_t;
@@ -423,6 +425,37 @@ f_format (int argc, Lisp_Object *argv)
 }
 
 Lisp_Object
+f_load (Lisp_Object path)
+{
+  const char *upath = unbox_string (path)->data;
+
+  FILE *f = fopen (upath, "r");
+  if (!f)
+    {
+      fprintf (stderr, "%s: cannot open file\n", upath);
+      exit (2);
+    }
+
+  Stream *s = stream_file (f);
+  Lexer *l = lex_init (s);
+
+  Lisp_Object form;
+  while (parse_next_sexp (l, &form))
+    {
+      eval (env_current (), form);
+    }
+
+  lex_close (l);
+  fclose (f);
+
+  // propagate environment to parent, otherwise definitions in loaded file would be lost
+  stack_parent_set_env (env_current ());
+
+  // TODO all errors not handled yet
+  return q_t;
+}
+
+Lisp_Object
 f_gc ()
 {
   printf ("before GC:\n");
@@ -509,6 +542,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("lambda", 2, UNEVALLED, f_lambda));
   obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
   obarray_put (o, DEFSUBR ("format", 2, MANY, f_format));
+  obarray_put (o, DEFSUBR ("load", 1, 1, f_load));
   obarray_put (o, DEFSUBR ("gc", 0, 0, f_gc));
   obarray_put (o, DEFSUBR ("memstats", 0, 0, f_memstats));
   obarray_put (o, DEFSUBR ("memdump", 0, 0, f_memdump));

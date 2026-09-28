@@ -44,8 +44,7 @@ test_lexer_mix ()
 {
   FILE *f = fopen ("test/assets/src-mix.tl", "r");
   Stream *s = stream_file (f);
-  Lexer *l = lex_init ();
-  lex_set_stream (l, s);
+  Lexer *l = lex_init (s);
   if (!l)
     return TEST_RESULT_FAIL ("test asset not found");
 
@@ -155,8 +154,7 @@ test_lexer_comments ()
 {
   FILE *f = fopen ("test/assets/src-comments.tl", "r");
   Stream *s = stream_file (f);
-  Lexer *l = lex_init ();
-  lex_set_stream (l, s);
+  Lexer *l = lex_init (s);
   if (!l)
     return TEST_RESULT_FAIL ("test asset not found");
 
@@ -201,8 +199,7 @@ test_lexer_defer_eval ()
 {
   FILE *f = fopen ("test/assets/src-defer-eval.tl", "r");
   Stream *s = stream_file (f);
-  Lexer *l = lex_init ();
-  lex_set_stream (l, s);
+  Lexer *l = lex_init (s);
   if (!l)
     return TEST_RESULT_FAIL ("test asset not found");
 
@@ -327,8 +324,7 @@ test_lexer_unterminated_str ()
 {
   FILE *f = fopen ("test/assets/src-err-unterminated-string.tl", "r");
   Stream *s = stream_file (f);
-  Lexer *l = lex_init ();
-  lex_set_stream (l, s);
+  Lexer *l = lex_init (s);
   if (!l)
     return TEST_RESULT_FAIL ("test asset not found");
 

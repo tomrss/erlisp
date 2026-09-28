@@ -73,8 +73,7 @@ Stream *stream_string (const char *string, size_t size);
 void stream_close (Stream *s);
 
 char *lex_token_type (TokenType tt);
-Lexer *lex_init ();
-void lex_set_stream (Lexer *l, Stream *s);
+Lexer *lex_init (Stream *s);
 Token lex_next (Lexer *lexer);
 void lex_close (Lexer *lexer);
 

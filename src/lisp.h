@@ -326,6 +326,7 @@ Lisp_Object f_cond (Lisp_Object form);
 Lisp_Object f_lambda (Lisp_Object form);
 Lisp_Object f_define (Lisp_Object form);
 Lisp_Object f_format (int argc, Lisp_Object *argv);
+Lisp_Object f_load (Lisp_Object path);
 Lisp_Object f_gc ();
 Lisp_Object f_memstats ();
 Lisp_Object f_memdump ();

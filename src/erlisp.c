@@ -15,21 +15,19 @@
 int
 main (int argc, char **argv)
 {
-  Lexer *l;
-  Stream *s;
-  Lisp_Object prog;
-  Lisp_Object res;
-
   printf ("ErLisp v0.1.0\n");
 
   init_alloc ();
   init_builtins ();
-  l = lex_init ();
 
   if (argc == 1)
     {
       // repl
 
+      Lexer *l;
+      Stream *s;
+      Lisp_Object prog;
+      Lisp_Object res;
       char *line = NULL;
       ssize_t lenline;
       int linum = 1;
@@ -66,15 +64,15 @@ main (int argc, char **argv)
               break;
             }
           s = stream_string (line, lenline);
-          lex_set_stream (l, s);
-          prog = parse_sexp (l);
+          l = lex_init(s);
 
+          prog = parse_sexp(l);
           res = eval (env_current(), prog);
           print_form (res);
           printf ("\n");
           gc();
 
-          stream_close (s);
+          lex_close (l);
           linum++;
         }
 
@@ -84,22 +82,8 @@ main (int argc, char **argv)
 
   // parse and eval file
 
-  const char *filename = argv[1];
-  FILE *f = fopen (filename, "r");
-  if (!f)
-    {
-      fprintf (stderr, "%s: cannot open file\n", filename);
-      exit (2);
-    }
+  Lisp_Object filename = make_string(argv[1]);
+  f_load(filename);
 
-  s = stream_file (f);
-  lex_set_stream (l, s);
-  prog = parse (l);
-  res = eval (l_globalenv, prog);
-
-  print_form (res);
-  printf ("\n");
-  fclose (f);
-  stream_close (s);
   return 0;
 }

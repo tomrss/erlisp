@@ -92,30 +92,16 @@ parse_sexp_from_tok (Lexer *l, Token tok)
 Lisp_Object
 parse_sexp (Lexer *l)
 {
-  return parse_sexp_from_tok (l, lex_next (l));
+  return parse_sexp_from_tok (l, lex_next(l));
 }
 
-Lisp_Object
-parse (Lexer *l)
+int
+parse_next_sexp (Lexer *l, Lisp_Object *out)
 {
-  // Build up a list of forms
-  Lisp_Object forms = q_nil;
-  Lisp_Object tail = q_nil;
+  Token tok = lex_next (l);
+  if (tok.type == TOK_EOF)
+    return 0;
 
-  Token tok;
-  while ((tok = lex_next (l)).type != TOK_EOF)
-    {
-      Lisp_Object form = parse_sexp_from_tok (l, tok);
-      Lisp_Object cell = make_cons (form, q_nil);
-
-      if (eq (forms, q_nil))
-        forms = cell;
-      else
-        f_setcdr (tail, cell);
-
-      tail = cell;
-    }
-
-  // wrap in (progn ...)
-  return f_cons (make_nstr_symbol ("progn", 5), forms);
+  *out = parse_sexp_from_tok (l, tok);
+  return 1;
 }
