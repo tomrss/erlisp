@@ -189,7 +189,7 @@ make_lambda (int minargs, int maxargs, Lisp_Object *args, Lisp_Object form)
   // TODO maybe use a lisp list args instead of c array?
   if (maxargs <= SMALL_LMBD_NARGS)
     {
-      lambda = blkalloc (all_smallvector);
+      lambda = blkalloc (all_smalllambda);
     }
   else
     {
