@@ -455,7 +455,9 @@ f_load (Lisp_Object path)
   Lisp_Object form;
   while (parse_next_sexp (l, &form))
     {
-      eval (env_current (), form);
+      // load evaluates always in global scope:
+      // that's how it's done in emacs and scheme
+      eval (l_globalenv, form);
     }
 
   lex_close (l);
