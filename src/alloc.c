@@ -2,6 +2,7 @@
 #include "blkalloc.h"
 #include "debug.h"
 #include "env.h"
+#include "error.h"
 #include "lisp.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -217,6 +218,9 @@ make_lambda (int minargs, int maxargs, Lisp_Object *args, Lisp_Object form)
 Lisp_Object
 defsubr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 {
+  if (maxargs != UNEVALLED && maxargs != MANY && maxargs > 8)
+    internal_error ("Cannot define subr with %d>8 maxargs, use MANY", maxargs);
+
   Lisp_Object subr = make_subr (name, minargs, maxargs, fun);
   Lisp_Object symb = make_str_symbol (name);
   {
@@ -313,7 +317,7 @@ gcmark ()
   // where predefined objects are allocated and safe from gc
   //
   // Or maybe obarray should be dropped and just use env.
-  gcmarkobj(v_obarray);
+  gcmarkobj (v_obarray);
   Lisp_Vector *obarray = unbox_vector (v_obarray);
   Lisp_Symbol *obs;
   for (size_t i = 0; i < obarray->size; i++)
@@ -455,8 +459,9 @@ memdump ()
   struct varsizeblk *blk = varsizeheap;
   while (blk)
     {
-      printf (" %3d: blk %-14p, next %-14p, obj %-14p, %s\n", i, blk, blk->next,
-              unbox_pointer(blk->obj), type_name (type_of (blk->obj)));
+      printf (" %3d: blk %-14p, next %-14p, obj %-14p, %s\n", i, blk,
+              blk->next, unbox_pointer (blk->obj),
+              type_name (type_of (blk->obj)));
       i++;
       blk = blk->next;
     }

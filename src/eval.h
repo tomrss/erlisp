@@ -30,7 +30,7 @@ Lisp_Object progn (Lisp_Object env, Lisp_Object form);
 Lisp_Object let (Lisp_Object env, Lisp_Object form);
 Lisp_Object define (Lisp_Object env, Lisp_Object form);
 
-void xsignal (Lisp_Object symbol, Lisp_Object data);
+NORETURN void xsignal (Lisp_Object symbol, Lisp_Object data);
 
 int condition_case_0 (Lisp_Object (*fun) (), Lisp_Object *out);
 int condition_case_1 (Lisp_Object (*fun) (Lisp_Object), Lisp_Object arg1,

@@ -5,6 +5,7 @@
 #include "alloc.h"
 #include "debug.h"
 #include "env.h"
+#include "error.h"
 #include "eval.h"
 #include "lisp.h"
 #include "obarray.h"
@@ -16,11 +17,7 @@ void
 stack_push (struct stackframe sf)
 {
   if (stackdepth >= STACKSIZE)
-    {
-      // TODO err
-      fprintf (stderr, "stack size exceeded: %d\n", STACKSIZE);
-      exit (9);
-    }
+    stackoverflow_error ();
 
   stack[stackdepth++] = sf;
 }
@@ -30,9 +27,7 @@ stack_pop ()
 {
   if (stackdepth <= 0)
     {
-      // TODO err
-      fprintf (stderr, "already at beginning of stack\n");
-      exit (9);
+      internal_error ("Unable to pop beginning of stack");
     }
 
   return stack[--stackdepth];
@@ -56,6 +51,7 @@ void
 stack_current_set_env (Lisp_Object env)
 {
   // TODO unmark gc?
+  // TODO cannot rememember why i wrote the TODO above ??
   stack[stackdepth - 1].env = env;
 }
 
@@ -139,8 +135,8 @@ eval (Lisp_Object env, Lisp_Object form)
       res = call_function (env, form);
       break;
     default:
-      // TODO
-      exit (666);
+      internal_error (
+          "This is embarassing... We forgot to implment eval for a type!!!");
     }
 
   debug_print_form (res);
@@ -176,12 +172,7 @@ eval_symbol (Lisp_Object env, Lisp_Object symbol)
       // lookup symbol in obarray
       lookedup = obarray_lookup (v_obarray, symbol);
       if (type_of (lookedup) != LISP_SYMB)
-        {
-          // todo err
-          fprintf (stderr, "unbound symbol: %s\n",
-                   unbox_string (unbox_symbol (symbol)->name)->data);
-          exit (13);
-        }
+        unbound_error (symbol);
     }
 
   // store val in symbol for faster lookups. TODO is this dangerous?
@@ -203,14 +194,13 @@ call_function (Lisp_Object env, Lisp_Object form)
   Lisp_Object funsym = f_car (form);
   Lisp_Object funargs = f_cdr (form);
 
+  // TODO this is temp: we support for now calling functions attached to a
+  // symbol only.
+  check_type (funsym, LISP_SYMB);
+
   Lisp_Object fun = eval_symbol (env, funsym);
   if (eq (fun, q_unbound))
-    {
-      // TODO err unbound function
-      fprintf (stderr, "unbound function: '%s'\n",
-               unbox_string (unbox_symbol (funsym)->name)->data);
-      exit (2);
-    }
+    unbound_error (funsym);
 
   switch (type_of (fun))
     {
@@ -227,27 +217,13 @@ call_function (Lisp_Object env, Lisp_Object form)
       fname = unbox_string (unbox_symbol (funsym)->name)->data;
       break;
     default:
-      // TODO error
-      fprintf (stderr, "illegal function type: %s\n",
-               type_name (type_of (fun)));
-      printf ("symbol ");
-      print_form (funsym);
-      printf (" -> ");
-      print_form (fun);
-      printf ("\n");
-      exit (12);
+      invalidfunc_error (fun);
     }
 
   int nargs = unbox_int (f_length (funargs));
 
   if (nargs < minargs || nargs > maxargs)
-    {
-      // TODO error
-      fprintf (stderr,
-               "wrong n of arguments: got %d, expected min %d, max %d\n",
-               nargs, minargs, maxargs);
-      return q_nil;
-    }
+    funcargs_error (minargs, maxargs, nargs);
 
   stack_push ((struct stackframe){ .fname = fname, .env = env });
 
@@ -266,10 +242,13 @@ call_function (Lisp_Object env, Lisp_Object form)
 
       if (type_of (fun) == LISP_LMBD)
         {
-          // TODO ugly if, this code sucks
-          fprintf (stderr, "lambda cannot have unevalled args\n");
-          exit (23);
+          internal_error("Lambda cannot have unevalled args; fexpr not supported");
+          // not supported YET but it would be fun!!
+          // https://web.cs.wpi.edu/~jshutt/dissertation/etd-090110-124904-Shutt-Dissertation.pdf
         }
+
+      // the FEXPR path should PROBABLY live here? in some way?
+
       // TODO ugly return in a switch that should decide arity!
       result = call_unevalled_subr (subr, funargs);
       stack_pop_free ();
@@ -352,9 +331,7 @@ call_subr (Lisp_Subr *usubr, int maxargs, int arity, Lisp_Object *argvals)
                                  argvals[3], argvals[4], argvals[5],
                                  argvals[6], argvals[7]);
     default:
-      // TODO error
-      fprintf (stderr, "max explicit SUBR arguments is 8\n");
-      exit (321);
+      internal_error ("Illegal state - Invoking subr with %d>8 args", arity);
     }
 }
 
@@ -409,12 +386,8 @@ let (Lisp_Object env, Lisp_Object form)
     {
       argform = f_car (argstail);
       arg = f_car (argform);
-      if (type_of (arg) != LISP_SYMB)
-        {
-          // TODO
-          fprintf (stderr, "malformed let, trying to assing to non symbol\n");
-          exit (31);
-        }
+      check_type (arg, LISP_SYMB);
+
       argval = eval (letenv, f_car (f_cdr (argform)));
       unbox_symbol (arg)->value = argval;
       letenv = env_new (letenv, arg);
@@ -432,7 +405,7 @@ Lisp_Object
 define (Lisp_Object env, Lisp_Object form)
 {
   Lisp_Object var = f_car (form);
-  // type safe must be symbol
+  check_type (var, LISP_SYMB);
   Lisp_Object value = eval (env, f_car (f_cdr (form)));
   unbox_symbol (var)->value = value;
 
@@ -455,7 +428,7 @@ make_error (Lisp_Object symbol, Lisp_Object data, Lisp_Object backtrace)
   return f_cons (symbol, f_cons (backtrace, data));
 }
 
-void
+NORETURN void
 xsignal (Lisp_Object symbol, Lisp_Object data)
 {
   if (handlerdepth == 0)

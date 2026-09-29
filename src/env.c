@@ -24,14 +24,12 @@ env_new (Lisp_Object parent, Lisp_Object symbol)
 Lisp_Object
 env_lookup (Lisp_Object env, Lisp_Object symbol)
 {
-  // TODO type safety
   return env_lookup_name (env, unbox_symbol (symbol)->name);
 }
 
 Lisp_Object
 env_lookup_name (Lisp_Object env, Lisp_Object name)
 {
-  // TODO type safety
   return f_cdr (f_assoc (name, env));
 }
 

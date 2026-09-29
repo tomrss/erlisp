@@ -33,6 +33,7 @@
 
 #ifdef __GNUC__
 #define UNUSED __attribute__((__unused__))
+#define NORETURN __attribute__((__noreturn__))
 #else /* __GNUC__ */
 #define UNUSED
 #endif /* __GNUC__ */
@@ -329,7 +330,7 @@ Lisp_Object f_lambda (Lisp_Object form);
 Lisp_Object f_define (Lisp_Object form);
 Lisp_Object f_format (int argc, Lisp_Object *argv);
 Lisp_Object f_load (Lisp_Object path);
-Lisp_Object f_signal (Lisp_Object symbol, Lisp_Object data);
+NORETURN Lisp_Object f_signal (Lisp_Object symbol, Lisp_Object data);
 Lisp_Object f_error_symbol (Lisp_Object err);
 Lisp_Object f_error_backtrace (Lisp_Object err);
 Lisp_Object f_error_data (Lisp_Object err);
@@ -341,7 +342,15 @@ extern Lisp_Object q_nil;
 extern Lisp_Object q_t;
 extern Lisp_Object q_unbound;
 extern Lisp_Object q_error;
+extern Lisp_Object q_error_arith;
+extern Lisp_Object q_error_file;
+extern Lisp_Object q_error_funcargs;
+extern Lisp_Object q_error_invalidfunc;
 extern Lisp_Object q_error_maxhandlerdepth;
+extern Lisp_Object q_error_stackoverflow;
+extern Lisp_Object q_error_type;
+extern Lisp_Object q_error_unbound;
+extern Lisp_Object q_error_unimplemented;
 extern Lisp_Object v_obarray;
 extern Lisp_Object l_globalenv;
 

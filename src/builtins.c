@@ -1,5 +1,6 @@
 #include "alloc.h"
 #include "env.h"
+#include "error.h"
 #include "eval.h"
 #include "lexer.h"
 #include "lisp.h"
@@ -10,7 +11,15 @@ Lisp_Object q_nil;
 Lisp_Object q_t;
 Lisp_Object q_unbound;
 Lisp_Object q_error;
+Lisp_Object q_error_arith;
+Lisp_Object q_error_file;
+Lisp_Object q_error_funcargs;
+Lisp_Object q_error_invalidfunc;
 Lisp_Object q_error_maxhandlerdepth;
+Lisp_Object q_error_stackoverflow;
+Lisp_Object q_error_type;
+Lisp_Object q_error_unbound;
+Lisp_Object q_error_unimplemented;
 Lisp_Object v_obarray;
 Lisp_Object l_globalenv;
 
@@ -27,6 +36,8 @@ static Lisp_Object rassoc_w_pred (Lisp_Object key, Lisp_Object alist,
 Lisp_Object
 f_symbol (Lisp_Object name)
 {
+  check_type (name, LISP_STRG);
+
   return make_symbol (name);
 }
 
@@ -39,7 +50,8 @@ f_cons (Lisp_Object car, Lisp_Object cdr)
 Lisp_Object
 f_setcar (Lisp_Object cons, Lisp_Object car)
 {
-  // todo type safety
+  check_type (cons, LISP_CONS);
+
   unbox_cons (cons)->car = car;
   return cons;
 }
@@ -47,7 +59,8 @@ f_setcar (Lisp_Object cons, Lisp_Object car)
 Lisp_Object
 f_setcdr (Lisp_Object cons, Lisp_Object cdr)
 {
-  // todo type safety
+  check_type (cons, LISP_CONS);
+
   unbox_cons (cons)->cdr = cdr;
   return cons;
 }
@@ -55,15 +68,16 @@ f_setcdr (Lisp_Object cons, Lisp_Object cdr)
 Lisp_Object
 f_vector (Lisp_Object size)
 {
+  check_type (size, LISP_INTG);
+
   return make_vector (unbox_int (size));
 }
 
 Lisp_Object
 f_symbol_value (Lisp_Object symbol)
 {
-  if (type_of (symbol) != LISP_SYMB)
-    // TODO
-    exit (3);
+  check_type (symbol, LISP_SYMB);
+
   return eval_symbol (env_current (), symbol);
 }
 
@@ -76,20 +90,23 @@ f_eval (Lisp_Object form)
 Lisp_Object
 f_car (Lisp_Object cons)
 {
-  if (type_of (cons) == LISP_CONS)
-    return unbox_cons (cons)->car;
-  return q_nil;
-  // TODO type safety
+  if (nil (cons))
+    return q_nil;
+
+  check_type (cons, LISP_CONS);
+
+  return unbox_cons (cons)->car;
 }
 
 Lisp_Object
 f_cdr (Lisp_Object cons)
 {
-  if (type_of (cons) != LISP_CONS)
+  if (nil (cons))
     return q_nil;
 
+  check_type (cons, LISP_CONS);
+
   return unbox_cons (cons)->cdr;
-  // TODO type safety
 }
 
 Lisp_Object
@@ -171,6 +188,9 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
 Lisp_Object
 f_string_equal_p (Lisp_Object x, Lisp_Object y)
 {
+  check_type (x, LISP_STRG);
+  check_type (y, LISP_STRG);
+
   Lisp_String *ux = unbox_string (x);
   Lisp_String *uy = unbox_string (y);
 
@@ -182,6 +202,8 @@ f_string_equal_p (Lisp_Object x, Lisp_Object y)
 Lisp_Object
 f_string_length (Lisp_Object string)
 {
+  check_type (string, LISP_STRG);
+
   return box_int (unbox_string (string)->size);
 }
 
@@ -208,72 +230,104 @@ f_length (Lisp_Object list)
   if (type_of (list) == LISP_STRG)
     return f_string_length (list);
 
-  // TODO err wrong type
-  fprintf (stderr, "err wrong type: list, %s\n", type_name (type_of (list)));
-  exit (12);
+  type_error_2 (list, LISP_CONS, LISP_STRG);
 }
 
 Lisp_Object
 f_sum (int argc, Lisp_Object *argv)
 {
-  // TODO type safety
   Lisp_Integer accu = 0;
   for (int i = 0; i < argc; i++)
-    accu += unbox_int (argv[i]);
+    {
+      // TODO only integers for now
+      check_type (argv[i], LISP_INTG);
+      accu += unbox_int (argv[i]);
+    }
   return box_int (accu);
 }
 
 Lisp_Object
 f_subtract (int argc, Lisp_Object *argv)
 {
-  // TODO type safety
+  if (argc == 0)
+    return box_int (0);
+
+  check_type (argv[0], LISP_INTG);
+
   Lisp_Integer accu = unbox_int (argv[0]);
   for (int i = 1; i < argc; i++)
-    accu -= unbox_int (argv[i]);
+    {
+      check_type (argv[i], LISP_INTG);
+      accu -= unbox_int (argv[i]);
+    }
   return box_int (accu);
 }
 
 Lisp_Object
 f_multiply (int argc, Lisp_Object *argv)
 {
-  // TODO type safety
   Lisp_Integer accu = 1;
   for (int i = 0; i < argc; i++)
-    accu *= unbox_int (argv[i]);
+    {
+      check_type (argv[i], LISP_INTG);
+      accu *= unbox_int (argv[i]);
+    }
   return box_int (accu);
 }
 
 Lisp_Object
 f_divide (int argc, Lisp_Object *argv)
 {
-  // TODO type safety
+  if (argc == 0)
+    return box_int (1);
+
+  check_type (argv[0], LISP_INTG);
+
   Lisp_Integer accu = unbox_int (argv[0]);
   for (int i = 1; i < argc; i++)
-    accu /= unbox_int (argv[i]);
+    {
+      check_type (argv[i], LISP_INTG);
+      Lisp_Integer divider = unbox_int (argv[i]);
+      if (divider == 0)
+        arith_error ("division by zero");
+      accu /= divider;
+    }
   return box_int (accu);
 }
 
 Lisp_Object
 f_ge (Lisp_Object x, Lisp_Object y)
 {
+  check_type (x, LISP_INTG);
+  check_type (y, LISP_INTG);
+
   return BOOL (unbox_int (x) > unbox_int (y));
 }
 
 Lisp_Object
 f_geq (Lisp_Object x, Lisp_Object y)
 {
+  check_type (x, LISP_INTG);
+  check_type (y, LISP_INTG);
+
   return BOOL (unbox_int (x) >= unbox_int (y));
 }
 
 Lisp_Object
 f_le (Lisp_Object x, Lisp_Object y)
 {
+  check_type (x, LISP_INTG);
+  check_type (y, LISP_INTG);
+
   return BOOL (unbox_int (x) < unbox_int (y));
 }
 
 Lisp_Object
 f_leq (Lisp_Object x, Lisp_Object y)
 {
+  check_type (x, LISP_INTG);
+  check_type (y, LISP_INTG);
+
   return BOOL (unbox_int (x) <= unbox_int (y));
 }
 
@@ -394,7 +448,10 @@ f_lambda (Lisp_Object form)
   Lisp_Object argtail = args;
   for (size_t i = 0; i < nargs; i++)
     {
-      argv[i] = f_car (argtail);
+      Lisp_Object argsym = f_car (argtail);
+      check_type (argsym, LISP_SYMB);
+
+      argv[i] = argsym;
       argtail = f_cdr (argtail);
     }
 
@@ -405,17 +462,12 @@ f_lambda (Lisp_Object form)
 Lisp_Object
 f_format (int argc, Lisp_Object *argv)
 {
-  if (argc < 2)
-    {
-      // TODO err
-      printf ("wrong arguments\n");
-      return q_nil;
-    }
-
   // TODO support formatting
+  (void)argc; // unused for now
 
   Lisp_Object dest = argv[0];
   Lisp_Object fmt = argv[1];
+  check_type (fmt, LISP_STRG);
   Lisp_String *ufmt = unbox_string (fmt);
 
   if (eq (dest, q_t))
@@ -431,23 +483,21 @@ f_format (int argc, Lisp_Object *argv)
       return fmt;
     }
 
-  // TODO else print to dest, not supported yet
-  fprintf (stderr,
-           "print to dest not nil (return str) or t (print stdout) not "
-           "supported yet\n");
-  return q_nil;
+  unimplemented_error (
+      "print to dest not nil (return str) or t (print stdout)");
 }
 
 Lisp_Object
 f_load (Lisp_Object path)
 {
+  check_type (path, LISP_STRG);
+
   const char *upath = unbox_string (path)->data;
 
   FILE *f = fopen (upath, "r");
   if (!f)
     {
-      fprintf (stderr, "%s: cannot open file\n", upath);
-      exit (2);
+      file_error (path);
     }
 
   Lexer *l = lex_init (stream_file (f));
@@ -457,7 +507,7 @@ f_load (Lisp_Object path)
     {
       // load evaluates always in global scope:
       // that's how it's done in emacs and scheme
-      eval (l_globalenv, form);
+      eval (env_current (), form);
     }
 
   lex_close (l);
@@ -471,11 +521,10 @@ f_load (Lisp_Object path)
   return q_t;
 }
 
-Lisp_Object
+NORETURN Lisp_Object
 f_signal (Lisp_Object symbol, Lisp_Object data)
 {
   xsignal (symbol, data);
-  return q_nil;
 }
 
 Lisp_Object
@@ -529,7 +578,15 @@ init_builtins ()
   q_nil = make_nstr_symbol ("nil", 3);
   q_t = make_nstr_symbol ("t", 1);
   q_error = make_nstr_symbol ("error", 5);
-  q_error_maxhandlerdepth = make_nstr_symbol ("max-handler-depth", 17);
+  q_error_arith = make_str_symbol ("arith-error");
+  q_error_file = make_str_symbol ("file-error");
+  q_error_funcargs = make_str_symbol ("func-args-error");
+  q_error_invalidfunc = make_str_symbol ("invalid-func-error");
+  q_error_maxhandlerdepth = make_str_symbol ("max-handler-depth-error");
+  q_error_stackoverflow = make_str_symbol ("stack-overflow-error");
+  q_error_type = make_str_symbol ("type-error");
+  q_error_unbound = make_str_symbol ("unbound-error");
+  q_error_unimplemented = make_str_symbol ("unimplemented-error");
 
   v_obarray = obarray_init ();
   obarray_register_builtins (v_obarray);
@@ -545,6 +602,15 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, q_nil);
   obarray_put (o, q_t);
   obarray_put (o, q_unbound);
+  obarray_put (o, q_error_arith);
+  obarray_put (o, q_error_file);
+  obarray_put (o, q_error_funcargs);
+  obarray_put (o, q_error_invalidfunc);
+  obarray_put (o, q_error_maxhandlerdepth);
+  obarray_put (o, q_error_stackoverflow);
+  obarray_put (o, q_error_type);
+  obarray_put (o, q_error_unbound);
+  obarray_put (o, q_error_unimplemented);
 
   obarray_put (o, DEFSUBR ("cons", 2, 2, f_cons));
   obarray_put (o, DEFSUBR ("setcar", 2, 2, f_setcar));
