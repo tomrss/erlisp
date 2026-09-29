@@ -1,6 +1,5 @@
 CC ?= gcc
-# TODO -02 optimizations
-CFLAGS ?= -Wall -Wextra -O0 -DHAVE_READLINE=1
+CFLAGS ?= -Wall -Wextra -O2 -DHAVE_READLINE=1
 LDFLAGS ?=
 LDLIBS ?= -lreadline
 SRC_DIR = src
