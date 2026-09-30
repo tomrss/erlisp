@@ -1,6 +1,6 @@
 CC ?= gcc
-CFLAGS ?= -Wall -Wextra -O2 -DHAVE_READLINE=1
-LDFLAGS ?=
+CFLAGS ?= -Wall -Wextra -O2 -flto -DHAVE_READLINE=1
+LDFLAGS ?= -flto
 LDLIBS ?= -lreadline
 SRC_DIR = src
 TEST_DIR = test
