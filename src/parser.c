@@ -49,7 +49,7 @@ parse_sexp_from_tok (Lexer *l, Token tok)
     case TOK_LPAREN:
       return parse_list (l);
     case TOK_QUOTE:
-      return f_cons (f_intern (make_str_symbol ("quote")),
+      return f_cons (f_intern (make_string ("quote")),
                      f_cons (parse_sexp (l), q_nil));
     case TOK_RPAREN:
       parser_error ("Unexpected ')'", &tok);
