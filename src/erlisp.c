@@ -15,14 +15,13 @@
 int
 main (int argc, char **argv)
 {
-  printf ("ErLisp v0.1.0\n");
-
   init_alloc ();
   init_builtins ();
 
   if (argc == 1)
     {
       // repl
+      printf ("ErLisp v0.1.0\n");
 
       Lexer *l;
       Lisp_Object prog;
