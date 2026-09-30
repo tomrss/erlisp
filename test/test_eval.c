@@ -24,6 +24,9 @@ static TestResult test_eval_quote ();
 static TestResult test_eval_load ();
 static TestResult test_eval_signal ();
 
+// name of the error symbol, for failure messages
+static const char *errname (Lisp_Object err);
+
 static TestCase test_eval_cases[] = {
   { .skip = 0, .name = "symbol", .run = test_eval_symbol },
   { .skip = 0, .name = "vector", .run = test_eval_vector },
@@ -47,6 +50,15 @@ TestSuite *
 test_suite_eval ()
 {
   return test_suite_init ("eval", test_eval_cases);
+}
+
+static const char *
+errname (Lisp_Object err)
+{
+  Lisp_Object symbol = f_error_symbol (err);
+  if (type_of (symbol) != LISP_SYMB)
+    return "<not a symbol>";
+  return unbox_string (unbox_symbol (symbol)->name)->data;
 }
 
 // test cases implementation
@@ -124,12 +136,15 @@ test_eval_subr_equal ()
   unbox_symbol (subrsymb)->value = subr;
   Lisp_Object test = make_cons (
       subrsymb, make_cons (box_int (1), make_cons (box_int (2), q_nil)));
-  Lisp_Object res = eval (l_globalenv, test);
+  Lisp_Object res;
+  TEST_ASSERT (safe_eval (l_globalenv, test, &res), "unexpected %s",
+               errname (res));
   if (!eq (res, q_nil))
     return TEST_RESULT_FAIL ("expect (equal 1 2) to evaluate to nil");
   test = make_cons (subrsymb,
                     make_cons (box_int (1), make_cons (box_int (1), q_nil)));
-  res = eval (l_globalenv, test);
+  TEST_ASSERT (safe_eval (l_globalenv, test, &res), "unexpected %s",
+               errname (res));
   if (!eq (res, q_t))
     return TEST_RESULT_FAIL ("expect (equal 1 1) to evaluate to t");
   return TEST_RESULT_SUCCESS;
@@ -144,7 +159,9 @@ test_eval_subr_strlen ()
   Lisp_Object teststr = make_nstring ("test", 4);
   unbox_symbol (subrsymb)->value = subr;
   Lisp_Object test = make_cons (subrsymb, make_cons (teststr, q_nil));
-  Lisp_Object res = eval (l_globalenv, test);
+  Lisp_Object res;
+  TEST_ASSERT (safe_eval (l_globalenv, test, &res), "unexpected %s",
+               errname (res));
   TEST_CHECK_TYPE ("string-length res", res, LISP_INTG);
 
   if (unbox_int (res) != 4)
@@ -197,7 +214,9 @@ test_eval_lambda_2args ()
 
   form = f_cons (lambdasym, f_cons (arg1val, f_cons (arg2val, q_nil)));
 
-  Lisp_Object result = eval (env, form);
+  Lisp_Object result;
+  TEST_ASSERT (safe_eval (env, form, &result), "unexpected %s",
+               errname (result));
 
   TEST_CHECK_TYPE ("result", result, LISP_INTG);
   TEST_ASSERT (unbox_int (result) == 3, "expected %d, got %ld", 3,
@@ -259,7 +278,9 @@ test_eval_lambda_nested ()
 
   form = f_cons (fun2sym, f_cons (fun2arg1val, q_nil));
 
-  Lisp_Object result = eval (l_globalenv, form);
+  Lisp_Object result;
+  TEST_ASSERT (safe_eval (l_globalenv, form, &result), "unexpected %s",
+               errname (result));
 
   TEST_CHECK_TYPE ("result", result, LISP_INTG);
   TEST_ASSERT (unbox_int (result) == 7, "expected %d, got %ld", 7,
@@ -277,7 +298,9 @@ test_eval_progn ()
                                 f_cons (make_string ("test"), q_nil)),
                         q_nil));
 
-  Lisp_Object result = progn (l_globalenv, form);
+  Lisp_Object result;
+  TEST_ASSERT (condition_case_2 (progn, l_globalenv, form, &result),
+               "unexpected %s", errname (result));
   TEST_ASSERT (eq (result, box_int (4)), "wrong");
 
   return TEST_RESULT_SUCCESS;
@@ -290,7 +313,9 @@ test_eval_progn_single ()
                                      f_cons (make_string ("test"), q_nil)),
                              q_nil);
 
-  Lisp_Object result = progn (l_globalenv, form);
+  Lisp_Object result;
+  TEST_ASSERT (condition_case_2 (progn, l_globalenv, form, &result),
+               "unexpected %s", errname (result));
   debug_print_form (result);
   TEST_ASSERT (eq (result, box_int (4)), "wrong");
 
@@ -306,7 +331,9 @@ test_eval_quote ()
                                 f_cons (make_string ("test"), q_nil)),
                         q_nil));
 
-  Lisp_Object result = progn (l_globalenv, form);
+  Lisp_Object result;
+  TEST_ASSERT (condition_case_2 (progn, l_globalenv, form, &result),
+               "unexpected %s", errname (result));
   debug_print_form (result);
   TEST_CHECK_TYPE ("quoted", form, LISP_CONS);
 
@@ -322,7 +349,10 @@ test_eval_load ()
   unbox_symbol (symb)->value = cell;
   obarray_put (v_obarray, symb);
 
-  Lisp_Object res = f_load (make_string ("test/assets/src-load.tl"));
+  Lisp_Object res;
+  TEST_ASSERT (condition_case_1 (f_load, make_string ("test/assets/src-load.tl"),
+                                 &res),
+               "unexpected %s", errname (res));
   TEST_ASSERT (eq (res, q_t), "expected load to return t");
 
   // the second form reads the value set by the first one
