@@ -173,7 +173,7 @@ eval_symbol (Lisp_Object env, Lisp_Object symbol)
 
   // lookup symbol in env
   val = env_lookup (env, symbol);
-  if (!eq (val, q_unbound) && !eq (val, q_nil))
+  if (!eq (val, q_unbound))
     return val;
 
   // return value attached to symbol (global)
@@ -258,6 +258,11 @@ call_function (Lisp_Object env, Lisp_Object form)
       stack_push ((struct stackframe){
           .fname = fname, .env = env, .form = form, .nargs = 0 });
 
+      // gc is orrible here, but here all roots are protected
+      // TODO find an elegand solution to this horror
+      if (gc_maybe ())
+        debug_printf ("GC executed");
+
       // TODO ugly return in a switch that should decide arity!
       result = call_unevalled_subr (subr, funargs);
       stack_pop_free ();
@@ -277,6 +282,11 @@ call_function (Lisp_Object env, Lisp_Object form)
                                    .form = form,
                                    .argvals = argvals,
                                    .nargs = arity });
+
+  // gc is orrible here, but here all roots are protected
+  // TODO find an elegand solution to this horror
+  if (gc_maybe ())
+    debug_printf ("GC executed");
 
   for (int i = 0; i < arity; i++)
     {

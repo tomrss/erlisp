@@ -5,6 +5,7 @@
 #include "error.h"
 #include "eval.h"
 #include "lisp.h"
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,9 @@ struct varsizeblk *varsizeheap;
 unsigned long int varsizeheaplength;
 size_t varsizeheapsize;
 
+static struct memstats lastgcstats;
+static unsigned long gcgen;
+
 static int is_obj_unmarked (Lisp_Object obj);
 static int is_cons_unmarked (void *ptr);
 static int is_symbol_unmarked (void *ptr);
@@ -47,6 +51,7 @@ static void unmark_symbol (void *ptr);
 static void unmark_string (void *ptr);
 static void unmark_vector (void *ptr);
 static void unmark_lambda (void *ptr);
+static size_t sum_used_size (struct memstats);
 
 static void gcmarkobj (Lisp_Object obj);
 static void gcmark ();
@@ -65,6 +70,9 @@ init_alloc ()
   all_smallstring = blkalloc_init (SMALL_STRG_SIZE, is_string_unmarked);
   all_smallvector = blkalloc_init (SMALL_VECT_SIZE, is_vector_unmarked);
   all_smalllambda = blkalloc_init (SMALL_LMBD_SIZE, is_lambda_unmarked);
+
+  lastgcstats = (struct memstats){};
+  gcgen = 0;
 }
 
 Lisp_Object
@@ -74,6 +82,7 @@ make_cons (Lisp_Object car, Lisp_Object cdr)
 
   cons->car = car;
   cons->cdr = cdr;
+  cons->gcmark = 0;
 
   return box_cons (cons);
 }
@@ -256,22 +265,54 @@ free_lisp_obj (Lisp_Object o)
   free (unbox_pointer (o));
 }
 
+static int gcwait = 0;
+
+int
+gc_maybe ()
+{
+  // TODO ugly!!  remove this and use a counter on the blkalloc
+  // this just to sample once in 20 instead of every time recalculating stats!
+  if (gcwait++ < 20)
+    return 0;
+  gcwait = 0;
+
+
+  // TODO defines
+  const float growthreshold = 5.;
+  const size_t minheap = 16 * 1024 * 1024;
+  const size_t maxheap = 256 * 1024 * 1024;
+
+  size_t used = current_used_size ();
+  if (used > maxheap)
+    {
+      gc ();
+      return 1;
+    }
+
+  size_t lastused = last_gcgen_used_size ();
+  if (used > minheap && used > lastused * (1 + growthreshold))
+    {
+      gc ();
+      return 1;
+    }
+
+  return 0;
+}
+
 struct memstats
 gc ()
 {
-  struct memstats stats;
   gcmark ();
-  stats = gcsweep ();
+  struct memstats stats = gcsweep ();
   gcunmark ();
+  gcgen++;
+  lastgcstats = stats;
   return stats;
 }
 
 static void
 gcmarkobj (Lisp_Object obj)
 {
-  if (eq (obj, q_nil) || eq (obj, q_t) || eq (obj, q_unbound))
-    return;
-
   // TODO this marks ALL. awful. use three-color approach:
   //  black -> collect
   //  grey  -> working list
@@ -430,6 +471,26 @@ memstats ()
     .varsizeheaplength = varsizeheaplength,
     .varsizeheapsize = varsizeheapsize,
   };
+}
+
+static size_t
+sum_used_size (struct memstats stats)
+{
+  return stats.conses.sizeused + stats.symbols.sizeused
+         + stats.smallstrings.sizeused + stats.smallvectors.sizeused
+         + stats.smalllambdas.sizeused + varsizeheapsize;
+}
+
+size_t
+current_used_size ()
+{
+  return sum_used_size (memstats ());
+}
+
+size_t
+last_gcgen_used_size ()
+{
+  return sum_used_size (lastgcstats);
 }
 
 static void

@@ -38,7 +38,10 @@ void free_lisp_obj (Lisp_Object o);
 
 void init_alloc ();
 struct memstats gc ();
+int gc_maybe ();
 struct memstats memstats ();
+size_t current_used_size();
+size_t last_gcgen_used_size ();
 void print_memstats (struct memstats);
 void memdump ();
 

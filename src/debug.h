@@ -1,4 +1,5 @@
 #include "lisp.h"
+#include <stdio.h>
 
 #define LPRINT(msg, lisp)                                                     \
   printf (msg);                                                               \
@@ -6,6 +7,7 @@
   printf ("\n");
 
 void print_form (Lisp_Object form);
+void fprint_form (FILE *stream, Lisp_Object form);
 void print_error (Lisp_Object err);
 void print_ptr_alignment (void *ptr, size_t align);
 
