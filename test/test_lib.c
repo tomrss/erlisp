@@ -57,7 +57,7 @@ test_suite_run (TestSuite *suite)
         {
           printf (ANSI_COLOR_YELLOW "SKIPPED\n" ANSI_COLOR_RESET);
           suite->skipped++;
-          return 0;
+          continue;
         }
 
       switch (sigsetjmp (jmp, 1))
@@ -66,16 +66,16 @@ test_suite_run (TestSuite *suite)
           res = tc.run ();
           break;
         case SIGSEGV:
-          res = (TestResult){ .success = 0, .reason = "SIGSEGV" };
+          res = TEST_RESULT_FAIL ("SIGSEGV");
           break;
         case SIGFPE:
-          res = (TestResult){ .success = 0, .reason = "SIGFPE" };
+          res = TEST_RESULT_FAIL ("SIGFPE");
           break;
         case SIGABRT:
-          res = (TestResult){ .success = 0, .reason = "SIGABRT" };
+          res = TEST_RESULT_FAIL ("SIGABRT");
           break;
         default:
-          res = (TestResult){ .success = 0, .reason = "unknwon signal" };
+          res = TEST_RESULT_FAIL ("unknwon signal");
           break;
         }
 

@@ -177,7 +177,9 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
     case LISP_SYMB:
       return f_string_equal_p (unbox_symbol (x)->name, unbox_symbol (y)->name);
     case LISP_CONS:
-      return f_equal_p (f_car (x), f_car (y));
+      if (nil (f_equal_p (f_car (x), f_car (y))))
+        return q_nil;
+      return f_equal_p (f_cdr (x), f_cdr (y));
     case LISP_VECT:
       break;
     case LISP_SUBR:
@@ -217,12 +219,20 @@ f_number_to_string (Lisp_Object number)
   // TODO other numbers, only int for now
   check_type (number, LISP_INTG);
 
-  size_t ndigits = floor (log10 (number)) + 1;
-  size_t size = ndigits + 1; // null terminator
-  char *buf = malloc (size * sizeof (char));
-  snprintf (buf, size, "%lld", unbox_int (number));
-  return make_string (buf);
+  Lisp_Integer unumber = unbox_int (number);
+  if (unumber == 0)
+    return make_string ("0");
+
+  size_t size = floor (log10 (unumber > 0 ? unumber : -unumber)) + 1;
+  if (unumber < 0)
+    size++; // minus sign
+
+  Lisp_Object string = make_uninit_string (size);
+
+  snprintf (unbox_string (string)->data, size + 1, "%lld", unumber);
+  return string;
 }
+
 Lisp_Object
 f_string_to_number (Lisp_Object string)
 {
@@ -322,6 +332,9 @@ f_subtract (int argc, Lisp_Object *argv)
 
   check_type (argv[0], LISP_INTG);
 
+  if (argc == 1)
+    return box_int (-unbox_int (argv[0]));
+
   Lisp_Integer accu = unbox_int (argv[0]);
   for (int i = 1; i < argc; i++)
     {
@@ -350,6 +363,9 @@ f_divide (int argc, Lisp_Object *argv)
     return box_int (1);
 
   check_type (argv[0], LISP_INTG);
+
+  if (argc == 1)
+    return box_int (1 / unbox_int (argv[0]));
 
   Lisp_Integer accu = unbox_int (argv[0]);
   for (int i = 1; i < argc; i++)
@@ -494,11 +510,23 @@ f_cond (Lisp_Object form)
 {
   Lisp_Object tail = form;
   Lisp_Object tem;
+  Lisp_Object result = q_nil;
   while (!nil (tail))
     {
       tem = f_car (tail);
       if (!nil (f_eval (f_car (tem))))
-        return f_eval (f_car (f_cdr (tem)));
+        {
+          Lisp_Object bodyform = f_cdr (tem);
+          Lisp_Object bodyformtail = bodyform;
+          while (!nil (bodyformtail))
+            {
+              Lisp_Object evalled = f_eval (f_car (bodyformtail));
+              result = evalled;
+              bodyformtail = f_cdr (bodyformtail);
+            }
+
+          return result;
+        }
       tail = f_cdr (tail);
     }
   return q_nil;

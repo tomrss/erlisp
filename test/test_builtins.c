@@ -106,7 +106,7 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "string=?", .run = test_builtins_string_equal },
   { .skip = 0, .name = "concat", .run = test_builtins_concat },
   { .skip = 0, .name = "num->str", .run = test_builtins_number_to_string },
-  { .skip = 1, .name = "num->str <=0 ", .run = test_builtins_number_to_string_edge },
+  { .skip = 0, .name = "num->str <=0 ", .run = test_builtins_number_to_string_edge },
   { .skip = 0, .name = "string->number", .run = test_builtins_string_to_number },
   { .skip = 0, .name = "format", .run = test_builtins_format },
   { .skip = 0, .name = "+", .run = test_builtins_sum },
