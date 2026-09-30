@@ -3,6 +3,7 @@
 #include "test_lib.h"
 
 #include "test_blkalloc.h"
+#include "test_builtins.h"
 #include "test_env.h"
 #include "test_eval.h"
 #include "test_lexer.h"
@@ -36,6 +37,7 @@ main (int argc, char **argv)
   test_execution_add (te, test_suite_lexer ());
   test_execution_add (te, test_suite_obarray ());
   test_execution_add (te, test_suite_eval ());
+  test_execution_add (te, test_suite_builtins ());
   test_execution_add (te, test_suite_env ());
   test_execution_add (te, test_suite_blkalloc ());
 
