@@ -250,7 +250,7 @@ Lisp_Object
 f_concat (int argc, Lisp_Object *argv)
 {
   if (argc == 0)
-    return make_uninit_string(0);
+    return make_uninit_string (0);
 
   size_t size = 0;
   for (int i = 0; i < argc; i++)
@@ -706,8 +706,8 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("symbol_value", 1, 1, f_symbol_value));
   obarray_put (o, DEFSUBR ("car", 1, 1, f_car));
   obarray_put (o, DEFSUBR ("cdr", 1, 1, f_cdr));
-  obarray_put (o, DEFSUBR ("cadr", 1, 1, f_cdr));
-  obarray_put (o, DEFSUBR ("cddr", 1, 1, f_cdr));
+  obarray_put (o, DEFSUBR ("cadr", 1, 1, f_cadr));
+  obarray_put (o, DEFSUBR ("cddr", 1, 1, f_cddr));
   obarray_put (o, DEFSUBR ("eq?", 2, 2, f_eq_p));
   obarray_put (o, DEFSUBR ("equal?", 2, 2, f_equal_p));
   obarray_put (o, DEFSUBR ("eval", 1, 1, f_eval));
