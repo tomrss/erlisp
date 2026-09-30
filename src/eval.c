@@ -8,7 +8,6 @@
 #include "error.h"
 #include "eval.h"
 #include "lisp.h"
-#include "obarray.h"
 
 struct stackframe stack[STACKSIZE];
 int stackdepth = 0;
@@ -37,6 +36,13 @@ struct stackframe
 stack_current ()
 {
   return stack[stackdepth - 1];
+}
+
+void
+stack_walk (void (*fun) (struct stackframe))
+{
+  for (int i = stackdepth - 1; i >= 0; i--)
+    fun (stack[i]);
 }
 
 void
@@ -226,8 +232,6 @@ call_function (Lisp_Object env, Lisp_Object form)
   if (nargs < minargs || nargs > maxargs)
     funcargs_error (minargs, maxargs, nargs);
 
-  stack_push ((struct stackframe){ .fname = fname, .env = env });
-
   /* number of arguments the function will be called with */
   int arity;
   switch (maxargs)
@@ -251,6 +255,9 @@ call_function (Lisp_Object env, Lisp_Object form)
 
       // the FEXPR path should PROBABLY live here? in some way?
 
+      stack_push ((struct stackframe){
+          .fname = fname, .env = env, .form = form, .nargs = 0 });
+
       // TODO ugly return in a switch that should decide arity!
       result = call_unevalled_subr (subr, funargs);
       stack_pop_free ();
@@ -259,19 +266,20 @@ call_function (Lisp_Object env, Lisp_Object form)
       arity = maxargs;
     }
 
-  // FIXME: argvals are never collected by gc...
-  Lisp_Object *argvals = alloca (arity * sizeof (Lisp_Object));
   Lisp_Object argtail = funargs;
+
+  Lisp_Object *argvals = alloca (arity * sizeof (Lisp_Object));
+  for (int i = 0; i < arity; i++)
+    argvals[i] = q_nil;
+
+  stack_push ((struct stackframe){ .fname = fname,
+                                   .env = env,
+                                   .form = form,
+                                   .argvals = argvals,
+                                   .nargs = arity });
 
   for (int i = 0; i < arity; i++)
     {
-      if (i >= nargs)
-        {
-          // pad with nils
-          argvals[i] = q_nil;
-          continue;
-        }
-
       argvals[i] = eval (env, f_car (argtail));
       argtail = f_cdr (argtail);
     }
@@ -384,6 +392,9 @@ let (Lisp_Object env, Lisp_Object form)
   Lisp_Object letenv = env;
   Lisp_Object argform, argsym, argval;
 
+  stack_push (
+      (struct stackframe){ .fname = "let", .env = letenv, .form = form });
+
   while (!eq (argstail, q_nil))
     {
       argform = f_car (argstail);
@@ -396,9 +407,9 @@ let (Lisp_Object env, Lisp_Object form)
       argval = eval (letenv, f_car (f_cdr (argform)));
       letenv = env_new (letenv, argsym, argval);
       argstail = f_cdr (argstail);
+      stack_current_set_env (letenv);
     }
 
-  stack_push ((struct stackframe){ .fname = "let", .env = letenv });
   Lisp_Object res = progn (letenv, body);
   stack_pop_free ();
 

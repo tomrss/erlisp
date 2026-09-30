@@ -3,6 +3,7 @@
 #include "debug.h"
 #include "env.h"
 #include "error.h"
+#include "eval.h"
 #include "lisp.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -116,9 +117,9 @@ make_string (const char *s)
 Lisp_Object
 make_nstring (const char *s, size_t size)
 {
-  Lisp_Object string = make_uninit_string(size);
+  Lisp_Object string = make_uninit_string (size);
 
-  memcpy(unbox_string(string)->data, s, size);
+  memcpy (unbox_string (string)->data, s, size);
 
   return string;
 }
@@ -318,15 +319,27 @@ gcmarkobj (Lisp_Object obj)
 }
 
 static void
+gcmarkstackframe (struct stackframe sf)
+{
+  gcmarkobj (sf.form);
+  // gcmarkobj (sf.env); probably needed when implementing lexical scoping
+  for (int j = 0; j < sf.nargs; j++)
+    gcmarkobj (sf.argvals[j]);
+}
+
+static void
 gcmark ()
 {
+  // current env is a gc root
+  // with dynamic scope every env is contained in this one
   gcmarkobj (env_current ());
+
+  // code that is being evaluated in the stack is a gc root
+  stack_walk (gcmarkstackframe);
 
   // TODO: obarray symbols should be protected from gc in other
   // way. maybe definining a "pure lisp" memory like in Emacs Lisp
   // where predefined objects are allocated and safe from gc
-  //
-  // Or maybe obarray should be dropped and just use env.
   gcmarkobj (v_obarray);
   Lisp_Vector *obarray = unbox_vector (v_obarray);
   Lisp_Symbol *obs;

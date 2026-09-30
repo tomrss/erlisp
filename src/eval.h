@@ -9,12 +9,17 @@ struct stackframe
 {
   const char *fname;
   Lisp_Object env;
+  // code in evaluation for protecting it from gc
+  Lisp_Object form;
+  Lisp_Object *argvals;
+  int nargs;
 };
 
 void stack_push (struct stackframe sf);
 struct stackframe stack_pop ();
 struct stackframe stack_pop_free ();
 struct stackframe stack_current ();
+void stack_walk (void (*fun) (struct stackframe));
 void stack_current_set_env (Lisp_Object env);
 void stack_parent_set_env (Lisp_Object env);
 
