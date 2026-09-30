@@ -63,7 +63,7 @@ blkalloc (blkallocator *blka)
   // we have to create another page with all elments in freelist
   struct blk *page = malloc (PAGE_SIZE);
   memset (page, 0, PAGE_SIZE);
-  ptrdiff_t pageoffset = offsetof (struct blk, ptr);
+  ptrdiff_t pageoffset = sizeof (struct blk);
   page->ptr = (void *)((uintptr_t)page + pageoffset);
   page->next = blka->pages;
   blka->pages = page;
