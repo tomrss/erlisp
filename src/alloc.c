@@ -153,6 +153,7 @@ make_symbol (Lisp_Object name)
   symbol->value = q_unbound;
   symbol->next = NULL;
   symbol->gcmark = 0;
+  symbol->localbound = 0;
 
   return box_symbol (symbol);
 }

@@ -174,6 +174,9 @@ test_eval_lambda_2args ()
 
   args[0] = arg1 = make_str_symbol ("arg1");
   args[1] = arg2 = make_str_symbol ("arg2");
+  // make_lambda does not mark args as local bound, f_lambda does
+  unbox_symbol (arg1)->localbound = 1;
+  unbox_symbol (arg2)->localbound = 1;
 
   arg1val = box_int (1);
   arg2val = box_int (2);
@@ -181,10 +184,8 @@ test_eval_lambda_2args ()
   subrsum = DEFSUBR ("+", 0, MANY, f_sum);
   subrcons = DEFSUBR ("cons", 2, 2, f_cons);
 
-  // bind arg1 in parent env to verify lexical scope
-  Lisp_Object parentarg1 = make_str_symbol ("arg1");
-  unbox_symbol (parentarg1)->value = box_int (998);
-  env = env_new (l_globalenv, parentarg1);
+  // bind arg1 in parent env to verify the lambda arg shadows it
+  env = env_new (l_globalenv, arg1, box_int (998));
 
   lambdabody = f_cons (
       f_cons (subrcons, f_cons (make_string ("not return"),
@@ -233,6 +234,10 @@ test_eval_lambda_nested ()
   fun1args[0] = fun1arg1 = make_str_symbol ("arg1");
   fun1args[1] = fun1arg2 = make_str_symbol ("arg2");
   fun2args[0] = fun2arg1 = make_str_symbol ("arg1");
+  // make_lambda does not mark args as local bound, f_lambda does
+  unbox_symbol (fun1arg1)->localbound = 1;
+  unbox_symbol (fun1arg2)->localbound = 1;
+  unbox_symbol (fun2arg1)->localbound = 1;
 
   fun2arg1val = make_string ("test");
 
@@ -327,11 +332,11 @@ test_eval_load ()
     return TEST_RESULT_FAIL ("expected car to be 42, got %ld",
                              unbox_int (car));
 
-  // the define in the loaded file must be propagated to the caller env
+  // the define in the loaded file is global: the value is in the symbol,
+  // interned by the parser
   Lisp_Object defsymb
-      = env_lookup_name (env_current (), make_string ("load-test-define"));
-  TEST_ASSERT (!eq (defsymb, q_nil),
-               "expected load-test-define to be bound after load");
+      = obarray_lookup_name (v_obarray, make_string ("load-test-define"));
+  TEST_CHECK_TYPE ("load-test-define symb", defsymb, LISP_SYMB);
   Lisp_Object defval = unbox_symbol (defsymb)->value;
   TEST_CHECK_TYPE ("load-test-define value", defval, LISP_INTG);
   if (unbox_int (defval) != 7)

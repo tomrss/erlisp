@@ -15,22 +15,17 @@ env_init ()
 }
 
 Lisp_Object
-env_new (Lisp_Object parent, Lisp_Object symbol)
+env_new (Lisp_Object parent, Lisp_Object symbol, Lisp_Object value)
 {
-  Lisp_Object newcell = make_cons (unbox_symbol (symbol)->name, symbol);
+  Lisp_Object newcell = make_cons (symbol, value);
   return make_cons (newcell, parent);
 }
 
 Lisp_Object
 env_lookup (Lisp_Object env, Lisp_Object symbol)
 {
-  return env_lookup_name (env, unbox_symbol (symbol)->name);
-}
-
-Lisp_Object
-env_lookup_name (Lisp_Object env, Lisp_Object name)
-{
-  return f_cdr (f_assoc (name, env));
+  Lisp_Object cell = f_assq (symbol, env);
+  return nil (cell) ? q_unbound : f_cdr (cell);
 }
 
 // TODO: this implementation makes multithreading impossible.

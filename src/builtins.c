@@ -451,6 +451,9 @@ f_lambda (Lisp_Object form)
       Lisp_Object argsym = f_car (argtail);
       check_type (argsym, LISP_SYMB);
 
+      // dirty trick to optimize lookups of purely global symbols
+      unbox_symbol (argsym)->localbound = 1;
+
       argv[i] = argsym;
       argtail = f_cdr (argtail);
     }
@@ -543,6 +546,21 @@ Lisp_Object
 f_error_data (Lisp_Object err)
 {
   return f_cddr (err);
+}
+
+Lisp_Object
+f_intern (Lisp_Object name)
+{
+  check_type (name, LISP_STRG);
+
+  Lisp_Object symbol;
+  symbol = obarray_lookup_name (v_obarray, name);
+  if (type_of (symbol) == LISP_SYMB)
+    return symbol;
+
+  symbol = make_symbol (name);
+  obarray_put (v_obarray, symbol);
+  return symbol;
 }
 
 Lisp_Object

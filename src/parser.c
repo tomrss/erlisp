@@ -49,7 +49,7 @@ parse_sexp_from_tok (Lexer *l, Token tok)
     case TOK_LPAREN:
       return parse_list (l);
     case TOK_QUOTE:
-      return f_cons (make_str_symbol ("quote"),
+      return f_cons (f_intern (make_str_symbol ("quote")),
                      f_cons (parse_sexp (l), q_nil));
     case TOK_RPAREN:
       parser_error ("Unexpected ')'", &tok);
@@ -69,16 +69,17 @@ parse_sexp_from_tok (Lexer *l, Token tok)
         Lisp_String *s = malloc (len + sizeof (Lisp_String));
         strncpy (s->data, tok.string, len);
         s->size = len;
-        Lisp_Object obsym = obarray_lookup_name (v_obarray, box_string(s));
+        // TODO use intern function instead of this
+        Lisp_Object obsym = obarray_lookup_name (v_obarray, box_string (s));
         Lisp_Object ret;
         if (type_of (obsym) == LISP_SYMB)
           // return the symbol found
           ret = obsym;
         else
-          // create new symbol
-          ret = make_str_symbol (tok.symbol);
+          // create new symbol and intern it
+          ret = obarray_put (v_obarray, make_str_symbol (tok.symbol));
         // cleanup
-        free(s);
+        free (s);
         return ret;
       }
     case TOK_EOF:
@@ -92,7 +93,7 @@ parse_sexp_from_tok (Lexer *l, Token tok)
 Lisp_Object
 parse_sexp (Lexer *l)
 {
-  return parse_sexp_from_tok (l, lex_next(l));
+  return parse_sexp_from_tok (l, lex_next (l));
 }
 
 int

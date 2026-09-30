@@ -63,20 +63,18 @@ test_env_found ()
 {
   Lisp_Object name = make_string ("test");
   Lisp_Object symb = make_symbol (name);
-  unbox_symbol (symb)->value = box_int (123);
   Lisp_Object env;
-  env = env_new (l_globalenv, symb);
-  env = env_new (env, make_str_symbol ("just"));
-  env = env_new (env, make_str_symbol ("to add"));
-  env = env_new (env, make_str_symbol ("some vars"));
+  env = env_new (l_globalenv, symb, box_int (123));
+  env = env_new (env, make_str_symbol ("just"), q_nil);
+  env = env_new (env, make_str_symbol ("to add"), q_nil);
+  env = env_new (env, make_str_symbol ("some vars"), q_nil);
   Lisp_Object found = env_lookup (env, symb);
   TEST_ASSERT (!eq (found, q_nil), "found is nil");
-  TEST_CHECK_TYPE ("found val", unbox_symbol (found)->value, LISP_INTG);
-  TEST_ASSERT (unbox_int (unbox_symbol (found)->value) == 123,
-               "wrong found val: %ld",
-               unbox_int (unbox_symbol (found)->value));
-  TEST_ASSERT (eq (env_lookup (l_globalenv, symb), q_nil),
-               "lookup in globalenv should go nil");
+  TEST_CHECK_TYPE ("found val", found, LISP_INTG);
+  TEST_ASSERT (unbox_int (found) == 123, "wrong found val: %ld",
+               unbox_int (found));
+  TEST_ASSERT (eq (env_lookup (l_globalenv, symb), q_unbound),
+               "lookup in globalenv should go unbound");
   return TEST_RESULT_SUCCESS;
 }
 
@@ -84,12 +82,12 @@ static TestResult
 test_env_notfound ()
 {
   Lisp_Object env;
-  env = env_new (l_globalenv, q_nil);
-  env = env_new (env, make_str_symbol ("just"));
-  env = env_new (env, make_str_symbol ("to add"));
-  env = env_new (env, make_str_symbol ("some vars"));
+  env = env_new (l_globalenv, make_str_symbol ("only"), q_nil);
+  env = env_new (env, make_str_symbol ("just"), q_nil);
+  env = env_new (env, make_str_symbol ("to add"), q_nil);
+  env = env_new (env, make_str_symbol ("some vars"), q_nil);
   Lisp_Object found = env_lookup (env, make_str_symbol ("notexists!!"));
-  TEST_ASSERT (eq (found, q_nil), "found is not nil");
+  TEST_ASSERT (eq (found, q_unbound), "found is not unbound");
   return TEST_RESULT_SUCCESS;
 }
 
@@ -98,27 +96,23 @@ test_env_shadowing ()
 {
   int origval = 123;
   int shdwval = 99;
-  Lisp_Object orig = make_str_symbol ("test");
-  Lisp_Object shdw = make_str_symbol ("test");
-  unbox_symbol (orig)->value = box_int (origval);
-  unbox_symbol (shdw)->value = box_int (shdwval);
+  // lookup is by identity: shadowing binds the same symbol again
+  Lisp_Object symb = make_str_symbol ("test");
   Lisp_Object parent, child;
-  parent = env_new (l_globalenv, orig);
-  parent = env_new (parent, make_str_symbol ("just"));
-  parent = env_new (parent, make_str_symbol ("to add"));
-  child = env_new (parent, make_str_symbol ("some vars"));
-  child = env_new (child, shdw);
-  child = env_new (child, make_str_symbol ("and some more"));
+  parent = env_new (l_globalenv, symb, box_int (origval));
+  parent = env_new (parent, make_str_symbol ("just"), q_nil);
+  parent = env_new (parent, make_str_symbol ("to add"), q_nil);
+  child = env_new (parent, make_str_symbol ("some vars"), q_nil);
+  child = env_new (child, symb, box_int (shdwval));
+  child = env_new (child, make_str_symbol ("and some more"), q_nil);
 
-  Lisp_Object found1 = env_lookup_name (parent, make_string("test"));
+  Lisp_Object found1 = env_lookup (parent, symb);
   TEST_ASSERT (!eq (found1, q_nil), "original is nil");
-  TEST_ASSERT (unbox_int (unbox_symbol (found1)->value) == origval,
-               "wrong found val in orig env: %ld",
-               unbox_int (unbox_symbol (found1)->value));
-  Lisp_Object found2 = env_lookup_name (child, make_string("test"));
+  TEST_ASSERT (unbox_int (found1) == origval,
+               "wrong found val in orig env: %ld", unbox_int (found1));
+  Lisp_Object found2 = env_lookup (child, symb);
   TEST_ASSERT (!eq (found2, q_nil), "shadowed is nil");
-  TEST_ASSERT (unbox_int (unbox_symbol (found2)->value) == shdwval,
-               "wrong found val in shadowed env: %ld",
-               unbox_int (unbox_symbol (found2)->value));
+  TEST_ASSERT (unbox_int (found2) == shdwval,
+               "wrong found val in shadowed env: %ld", unbox_int (found2));
   return TEST_RESULT_SUCCESS;
 }

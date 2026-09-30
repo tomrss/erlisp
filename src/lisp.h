@@ -105,7 +105,12 @@ struct lisp_string
 struct lisp_symbol
 {
   char gcmark;
+  // whether symbol has let or lambda local bindings; if false, it is global
+  char localbound;
   Lisp_Object name;
+  // this value is ONLY for global scope. the couple localbound-value
+  // gives us a simple way to avoid keeping a separate hash table for
+  // the globals (maybe it would be a better idea?)
   Lisp_Object value;
   // next symbol in the obarray bucket, see obarray.h.  this is
   // inspired from emacs lisp
@@ -334,6 +339,7 @@ NORETURN Lisp_Object f_signal (Lisp_Object symbol, Lisp_Object data);
 Lisp_Object f_error_symbol (Lisp_Object err);
 Lisp_Object f_error_backtrace (Lisp_Object err);
 Lisp_Object f_error_data (Lisp_Object err);
+Lisp_Object f_intern (Lisp_Object name);
 Lisp_Object f_gc ();
 Lisp_Object f_memstats ();
 Lisp_Object f_memdump ();

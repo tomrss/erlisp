@@ -147,37 +147,35 @@ eval (Lisp_Object env, Lisp_Object form)
 Lisp_Object
 eval_symbol (Lisp_Object env, Lisp_Object symbol)
 {
-  if (eq (symbol, q_t))
-    return q_t;
-  if (eq (symbol, q_nil))
-    return q_nil;
-  if (eq (symbol, q_unbound))
-    return q_unbound;
+  if (eq (symbol, q_t) || eq (symbol, q_nil) || eq (symbol, q_unbound))
+    return symbol;
 
   Lisp_Object val;
-  Lisp_Symbol *usymbol = unbox_symbol (symbol);
 
-  val = usymbol->value;
-  if (!eq (val, q_unbound))
+  Lisp_Symbol *usymbol = unbox_symbol (symbol);
+  if (!usymbol->localbound)
     {
-      // value already in the symbol
+      // just a petty "optimization" with a trick. if the symbol is not
+      // local bound, i.e. it has only purely global binding, we don't
+      // bother looking up the symbol in env: we return its global
+      // value, that by definition is stored in the symbol itself
+      val = usymbol->value;
+      if (eq (val, q_unbound))
+        unbound_error (symbol);
       return val;
     }
 
-  Lisp_Object lookedup;
   // lookup symbol in env
-  lookedup = env_lookup (env, symbol);
-  if (eq (lookedup, q_unbound) || eq (lookedup, q_nil))
-    {
-      // lookup symbol in obarray
-      lookedup = obarray_lookup (v_obarray, symbol);
-      if (type_of (lookedup) != LISP_SYMB)
-        unbound_error (symbol);
-    }
+  val = env_lookup (env, symbol);
+  if (!eq (val, q_unbound) && !eq (val, q_nil))
+    return val;
 
-  // store val in symbol for faster lookups. TODO is this dangerous?
-  val = unbox_symbol (lookedup)->value;
-  return val;
+  // return value attached to symbol (global)
+  val = unbox_symbol (symbol)->value;
+  if (!eq (val, q_unbound))
+    return val;
+
+  unbound_error (symbol);
 }
 
 Lisp_Object
@@ -199,8 +197,6 @@ call_function (Lisp_Object env, Lisp_Object form)
   check_type (funsym, LISP_SYMB);
 
   Lisp_Object fun = eval_symbol (env, funsym);
-  if (eq (fun, q_unbound))
-    unbound_error (funsym);
 
   switch (type_of (fun))
     {
@@ -217,6 +213,11 @@ call_function (Lisp_Object env, Lisp_Object form)
       fname = unbox_string (unbox_symbol (funsym)->name)->data;
       break;
     default:
+      debug_printf ("funcsym: ");
+      debug_print_form (funsym);
+      debug_printf ("\nfun: ");
+      debug_print_form (fun);
+      debug_printf ("\n");
       invalidfunc_error (fun);
     }
 
@@ -242,7 +243,8 @@ call_function (Lisp_Object env, Lisp_Object form)
 
       if (type_of (fun) == LISP_LMBD)
         {
-          internal_error("Lambda cannot have unevalled args; fexpr not supported");
+          internal_error (
+              "Lambda cannot have unevalled args; fexpr not supported");
           // not supported YET but it would be fun!!
           // https://web.cs.wpi.edu/~jshutt/dissertation/etd-090110-124904-Shutt-Dissertation.pdf
         }
@@ -342,9 +344,9 @@ call_lambda (Lisp_Object env, Lisp_Lambda *ulambda, Lisp_Object *argvals)
   Lisp_Object lambdaenv = env;
   for (int i = 0; i < ulambda->maxargs; i++)
     {
-      Lisp_Object argsym = make_symbol (unbox_symbol (ulambda->args[i])->name);
-      unbox_symbol (argsym)->value = argvals[i];
-      lambdaenv = env_new (lambdaenv, argsym);
+      Lisp_Object argsym = ulambda->args[i];
+      Lisp_Object argval = argvals[i];
+      lambdaenv = env_new (lambdaenv, argsym, argval);
     }
 
   stack_current_set_env (lambdaenv);
@@ -380,17 +382,19 @@ let (Lisp_Object env, Lisp_Object form)
   Lisp_Object argstail = args;
   Lisp_Object body = f_cdr (form);
   Lisp_Object letenv = env;
-  Lisp_Object argform, arg, argval;
+  Lisp_Object argform, argsym, argval;
 
   while (!eq (argstail, q_nil))
     {
       argform = f_car (argstail);
-      arg = f_car (argform);
-      check_type (arg, LISP_SYMB);
+      argsym = f_car (argform);
+      check_type (argsym, LISP_SYMB);
+
+      // dirty trick to optimize lookups of purely global symbols
+      unbox_symbol (argsym)->localbound = 1;
 
       argval = eval (letenv, f_car (f_cdr (argform)));
-      unbox_symbol (arg)->value = argval;
-      letenv = env_new (letenv, arg);
+      letenv = env_new (letenv, argsym, argval);
       argstail = f_cdr (argstail);
     }
 
@@ -407,16 +411,23 @@ define (Lisp_Object env, Lisp_Object form)
   Lisp_Object var = f_car (form);
   check_type (var, LISP_SYMB);
   Lisp_Object value = eval (env, f_car (f_cdr (form)));
-  unbox_symbol (var)->value = value;
 
-  Lisp_Object newenv = env_new (env, var);
+  if (nil (env))
+    {
+      // top level: define in global
+      unbox_symbol (var)->value = value;
+    }
+  else
+    {
+      Lisp_Object newenv = env_new (env, var, value);
 
-  // TODO this is not thread safe :(
-  // TODO this seems very wrong
+      // TODO this is not thread safe :(
+      // TODO this seems very wrong
 
-  // set new env in the parent stack (the current is the one in which
-  // "define" is evalled and will die afterwards
-  stack_parent_set_env (newenv);
+      // set new env in the parent stack (the current is the one in which
+      // "define" is evalled and will die afterwards
+      stack_parent_set_env (newenv);
+    }
 
   return value;
 }
