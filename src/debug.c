@@ -1,10 +1,5 @@
-/* #define DEBUG_PRINT 1 */
-
 #include "debug.h"
 #include "lisp.h"
-#ifdef DEBUG_PRINT
-#include <stdarg.h>
-#endif /* DEBUG_PRINT */
 
 // TODO very ugly, pls print to string not to stdout
 
@@ -79,32 +74,3 @@ print_error (Lisp_Object err)
       tail = f_cdr (tail);
     }
 }
-
-#ifdef DEBUG_PRINT
-void
-debug_print_form (Lisp_Object form)
-{
-  print_form (form);
-}
-#else  /* DEBUG_PRINT */
-void
-debug_print_form (UNUSED Lisp_Object _)
-{
-}
-#endif /* DEBUG_PRINT */
-
-#ifdef DEBUG_PRINT
-void
-debug_printf (const char *fmt, ...)
-{
-  va_list vargs;
-  va_start (vargs, fmt);
-  vprintf (fmt, vargs);
-  va_end (vargs);
-}
-#else  /* DEBUG_PRINT */
-void
-debug_printf (UNUSED const char *_, ...)
-{
-}
-#endif /* DEBUG_PRINT */
