@@ -1,4 +1,6 @@
 #include "test_lib.h"
+#include <setjmp.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,7 +18,7 @@ test_suite_init (char *name, TestCase *cases)
   suite->failed = 0;
   suite->skipped = 0;
 
-  // compute size cycling until terminator 
+  // compute size cycling until terminator
   int i = 0;
   TestCase tc;
   while ((tc = cases[i]).name != NULL && tc.run != NULL)
@@ -26,9 +28,22 @@ test_suite_init (char *name, TestCase *cases)
   return suite;
 }
 
+static sigjmp_buf jmp;
+
+static void
+handler (int sig)
+{
+  siglongjmp (jmp, sig);
+}
+
 int
 test_suite_run (TestSuite *suite)
 {
+
+  signal (SIGSEGV, handler);
+  signal (SIGFPE, handler);
+  signal (SIGABRT, handler);
+
   for (int i = 0; i < suite->size; i++)
     {
       TestCase tc;
@@ -42,24 +57,40 @@ test_suite_run (TestSuite *suite)
         {
           printf (ANSI_COLOR_YELLOW "SKIPPED\n" ANSI_COLOR_RESET);
           suite->skipped++;
+          return 0;
+        }
+
+      switch (sigsetjmp (jmp, 1))
+        {
+        case 0:
+          res = tc.run ();
+          break;
+        case SIGSEGV:
+          res = (TestResult){ .success = 0, .reason = "SIGSEGV" };
+          break;
+        case SIGFPE:
+          res = (TestResult){ .success = 0, .reason = "SIGFPE" };
+          break;
+        case SIGABRT:
+          res = (TestResult){ .success = 0, .reason = "SIGABRT" };
+          break;
+        default:
+          res = (TestResult){ .success = 0, .reason = "unknwon signal" };
+          break;
+        }
+
+      if (res.success)
+        {
+          printf (ANSI_COLOR_GREEN "SUCCESS\n" ANSI_COLOR_RESET);
         }
       else
         {
-          res = tc.run ();
-
-          if (res.success)
-            {
-              printf (ANSI_COLOR_GREEN "SUCCESS\n" ANSI_COLOR_RESET);
-            }
-          else
-            {
-              printf (ANSI_COLOR_RED "FAIL" ANSI_COLOR_RESET "    %s\n",
-                      res.reason);
-              suite->failed++;
-            }
-
-          suite->executed++;
+          printf (ANSI_COLOR_RED "FAIL" ANSI_COLOR_RESET "    %s\n",
+                  res.reason);
+          suite->failed++;
         }
+
+      suite->executed++;
     }
 
   return 0;
