@@ -6,6 +6,10 @@
 #include "lisp.h"
 #include "obarray.h"
 #include "parser.h"
+#include <errno.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 Lisp_Object q_nil;
 Lisp_Object q_t;
@@ -205,6 +209,70 @@ f_string_length (Lisp_Object string)
   check_type (string, LISP_STRG);
 
   return box_int (unbox_string (string)->size);
+}
+
+Lisp_Object
+f_number_to_string (Lisp_Object number)
+{
+  // TODO other numbers, only int for now
+  check_type (number, LISP_INTG);
+
+  size_t ndigits = floor (log10 (number)) + 1;
+  size_t size = ndigits + 1; // null terminator
+  char *buf = malloc (size * sizeof (char));
+  snprintf (buf, size, "%lld", unbox_int (number));
+  return make_string (buf);
+}
+Lisp_Object
+f_string_to_number (Lisp_Object string)
+{
+  check_type (string, LISP_STRG);
+
+  const char *cstr = unbox_string (string)->data;
+  char *endptr;
+  long num;
+
+  errno = 0;
+
+  num = strtol (cstr, &endptr, 10);
+
+  if (cstr == endptr)
+    arith_error_2 ("Unable to parse number", string);
+  else if (errno == ERANGE)
+    arith_error_2 ("Number of out range", string);
+  else if (*endptr != '\0')
+    arith_error_2 ("Cannot parse unsafe not null-terminated string", string);
+  else
+    return box_int (num);
+}
+
+Lisp_Object
+f_concat (int argc, Lisp_Object *argv)
+{
+  if (argc == 0)
+    return make_uninit_string(0);
+
+  size_t size = 0;
+  for (int i = 0; i < argc; i++)
+    {
+      Lisp_Object string = argv[i];
+      check_type (string, LISP_STRG);
+      size += unbox_string (string)->size;
+    }
+
+  Lisp_Object result = make_uninit_string (size);
+  Lisp_String *uresult = unbox_string (result);
+
+  size_t offset = 0;
+  for (int i = 0; i < argc; i++)
+    {
+      Lisp_Object string = argv[i];
+      Lisp_String *ustring = unbox_string (string);
+      memcpy (uresult->data + offset, ustring->data, ustring->size);
+      offset += ustring->size;
+    }
+
+  return result;
 }
 
 Lisp_Object
@@ -649,6 +717,9 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("rassq", 2, 2, f_rassq));
   obarray_put (o, DEFSUBR ("string=?", 2, 2, f_string_equal_p));
   obarray_put (o, DEFSUBR ("string-length", 1, 1, f_string_length));
+  obarray_put (o, DEFSUBR ("number->string", 1, 1, f_number_to_string));
+  obarray_put (o, DEFSUBR ("string->number", 1, 1, f_string_to_number));
+  obarray_put (o, DEFSUBR ("concat", 0, MANY, f_concat));
   obarray_put (o, DEFSUBR ("length", 1, 1, f_length));
   obarray_put (o, DEFSUBR ("+", 0, MANY, f_sum));
   obarray_put (o, DEFSUBR ("-", 1, MANY, f_subtract));

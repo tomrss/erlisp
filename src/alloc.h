@@ -22,6 +22,7 @@ struct memstats
 
 Lisp_Object make_string (const char *s);
 Lisp_Object make_nstring (const char *s, size_t size);
+Lisp_Object make_uninit_string (size_t size);
 Lisp_Object make_symbol (Lisp_Object name);
 Lisp_Object make_str_symbol (const char *s);
 Lisp_Object make_nstr_symbol (const char *s, size_t size);

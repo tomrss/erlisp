@@ -116,6 +116,16 @@ make_string (const char *s)
 Lisp_Object
 make_nstring (const char *s, size_t size)
 {
+  Lisp_Object string = make_uninit_string(size);
+
+  memcpy(unbox_string(string)->data, s, size);
+
+  return string;
+}
+
+Lisp_Object
+make_uninit_string (size_t size)
+{
   Lisp_String *string;
   if (size < SMALL_STRG_NCHRS)
     {
@@ -137,7 +147,6 @@ make_nstring (const char *s, size_t size)
 
   string->gcmark = 0;
   string->size = size;
-  strncpy (string->data, s, size);
   // not counted in size
   string->data[size] = '\0';
 

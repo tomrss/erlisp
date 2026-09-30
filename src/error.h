@@ -74,6 +74,14 @@ arith_error (const char *msg)
 }
 
 NORETURN static inline void
+arith_error_2 (const char *msg, Lisp_Object details)
+{
+  Lisp_Object data = f_cons(details, q_nil);
+  data = f_cons (make_string (msg), q_nil);
+  f_signal (q_error_arith, data);
+}
+
+NORETURN static inline void
 invalidfunc_error (Lisp_Object invalidfunc)
 {
   f_signal (q_error_invalidfunc, f_cons (invalidfunc, q_nil));
