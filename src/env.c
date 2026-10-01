@@ -1,20 +1,10 @@
 #include "env.h"
-#include "eval.h"
 #include "lisp.h"
+#include "stack.h"
 #include <stdio.h>
 
 // just a marker we use as anchor for the env alist
 #define ENV_ANCHOR box_int (42)
-
-// TODO confusing function: like multiple envs could be init this way, not
-// true.
-Lisp_Object
-env_init ()
-{
-  Lisp_Object env = f_cons (ENV_ANCHOR, q_nil);
-  stack_push ((struct stackframe){ .fname = "base", .env = env });
-  return env;
-}
 
 Lisp_Object
 env_new (Lisp_Object parent)
@@ -40,6 +30,7 @@ env_lookup (Lisp_Object env, Lisp_Object symbol)
 }
 
 // TODO: this implementation makes multithreading impossible.
+// TODO I don't want to keep this function here, don't want to import stack.
 Lisp_Object
 env_current ()
 {

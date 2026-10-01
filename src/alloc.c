@@ -2,8 +2,8 @@
 #include "blkalloc.h"
 #include "print.h"
 #include "error.h"
-#include "eval.h"
 #include "lisp.h"
+#include "stack.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>

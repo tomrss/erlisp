@@ -4,6 +4,7 @@
 #include "alloc.h"
 #include "eval.h"
 #include "lisp.h"
+#include "stack.h"
 #include <stdarg.h>
 #include <stdio.h>
 

@@ -3,24 +3,6 @@
 
 #include "lisp.h"
 
-#define STACKSIZE 1024
-
-struct stackframe
-{
-  const char *fname;
-  Lisp_Object env;
-  // code in evaluation for protecting it from gc
-  Lisp_Object form;
-  Lisp_Object *argvals;
-  int nargs;
-};
-
-void stack_push (struct stackframe sf);
-struct stackframe stack_pop ();
-struct stackframe stack_pop_free ();
-struct stackframe stack_current ();
-void stack_walk (void (*fun) (struct stackframe));
-
 Lisp_Object eval (Lisp_Object env, Lisp_Object form);
 Lisp_Object eval_symbol (Lisp_Object env, Lisp_Object form);
 Lisp_Object call_function (Lisp_Object env, Lisp_Object form);

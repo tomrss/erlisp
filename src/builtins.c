@@ -6,6 +6,7 @@
 #include "lisp.h"
 #include "obarray.h"
 #include "parser.h"
+#include "stack.h"
 #include <errno.h>
 #include <math.h>
 #include <stdio.h>
@@ -715,7 +716,8 @@ init_builtins ()
   v_obarray = obarray_init ();
   obarray_register_builtins (v_obarray);
 
-  l_globalenv = env_init ();
+  l_globalenv = env_new (q_nil);
+  stack_init (l_globalenv);
   currentenv = malloc (sizeof (Lisp_Object));
   *currentenv = l_globalenv;
 }

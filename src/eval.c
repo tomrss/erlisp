@@ -3,67 +3,12 @@
 #include <stdio.h>
 
 #include "alloc.h"
-#include "print.h"
 #include "env.h"
 #include "error.h"
 #include "eval.h"
 #include "lisp.h"
-
-struct stackframe stack[STACKSIZE];
-int stackdepth = 0;
-
-void
-stack_push (struct stackframe sf)
-{
-  if (stackdepth >= STACKSIZE)
-    stackoverflow_error ();
-
-  stack[stackdepth++] = sf;
-}
-
-struct stackframe
-stack_pop ()
-{
-  if (stackdepth <= 0)
-    {
-      internal_error ("Unable to pop beginning of stack");
-    }
-
-  return stack[--stackdepth];
-}
-
-struct stackframe
-stack_current ()
-{
-  return stack[stackdepth - 1];
-}
-
-void
-stack_walk (void (*fun) (struct stackframe))
-{
-  for (int i = stackdepth - 1; i >= 0; i--)
-    fun (stack[i]);
-}
-
-// TODO wtf is this function??
-struct stackframe
-stack_pop_free ()
-{
-  struct stackframe pop = stack_pop ();
-  /* struct stackframe cur = stack_current (); */
-
-  /* Lisp_Object tail = pop.env; */
-  /* Lisp_Object target = cur.env; */
-
-  // TODO we cannot really free as they are managed by gc
-  /* while (!eq (tail, target) && !eq (tail, q_nil)) */
-  /*   { */
-  /*     free_lisp_obj (f_car (tail)); */
-  /*     tail = f_cdr (tail); */
-  /*   } */
-
-  return pop;
-}
+#include "print.h"
+#include "stack.h"
 
 // TODO this number is completely random
 #define HANDLERSIZE 512
@@ -249,7 +194,7 @@ call_function (Lisp_Object env, Lisp_Object form)
 
       // TODO ugly return in a switch that should decide arity!
       result = call_unevalled_subr (subr, funargs);
-      stack_pop_free ();
+      stack_pop ();
       return result;
     default:
       arity = maxargs;
@@ -283,7 +228,7 @@ call_function (Lisp_Object env, Lisp_Object form)
   else // is lambda
     result = call_lambda (lambda, argvals);
 
-  stack_pop_free ();
+  stack_pop ();
 
   return result;
 }
@@ -352,7 +297,7 @@ call_lambda (Lisp_Lambda *ulambda, Lisp_Object *argvals)
     }
 
   // set lambda env in current stack for protecting from GC.
-  stack[stackdepth - 1].env = env;
+  stack_current_set_env (env);
 
   // recursively eval the lambda body
   return progn (env, ulambda->form);
@@ -402,7 +347,7 @@ let (Lisp_Object env, Lisp_Object form)
     }
 
   Lisp_Object res = progn (letenv, body);
-  stack_pop_free ();
+  stack_pop ();
 
   return res;
 }
@@ -447,22 +392,7 @@ xsignal (Lisp_Object symbol, Lisp_Object data)
 
   struct handler *h = current_handler ();
 
-  Lisp_Object backtrace = q_nil;
-  Lisp_Object tail = q_nil;
-
-  // unwind the stack
-  while (stackdepth > h->stackind)
-    {
-      struct stackframe sf = stack_pop ();
-      Lisp_Object cell = f_cons (make_string (sf.fname), q_nil);
-
-      if (eq (backtrace, q_nil))
-        backtrace = cell;
-      else
-        f_setcdr (tail, cell);
-
-      tail = cell;
-    }
+  Lisp_Object backtrace = stack_unwind (h->stackind, NULL);
 
   Lisp_Object err = make_error (symbol, data, backtrace);
   h->error = err;
@@ -473,7 +403,7 @@ xsignal (Lisp_Object symbol, Lisp_Object data)
 int
 condition_case_0 (Lisp_Object (*fun) (), Lisp_Object *out)
 {
-  struct handler *h = push_handler (stackdepth);
+  struct handler *h = push_handler (stack_depth_current ());
 
   if (setjmp (h->jmp))
     {
@@ -493,7 +423,7 @@ int
 condition_case_1 (Lisp_Object (*fun) (Lisp_Object), Lisp_Object arg1,
                   Lisp_Object *out)
 {
-  struct handler *h = push_handler (stackdepth);
+  struct handler *h = push_handler (stack_depth_current ());
 
   if (setjmp (h->jmp))
     {
@@ -513,7 +443,7 @@ int
 condition_case_2 (Lisp_Object (*fun) (Lisp_Object, Lisp_Object),
                   Lisp_Object arg1, Lisp_Object arg2, Lisp_Object *out)
 {
-  struct handler *h = push_handler (stackdepth);
+  struct handler *h = push_handler (stack_depth_current ());
 
   if (setjmp (h->jmp))
     {
@@ -533,7 +463,7 @@ int
 condition_case_n (Lisp_Object (*fun) (int, Lisp_Object *), int nargs,
                   Lisp_Object *args, Lisp_Object *out)
 {
-  struct handler *h = push_handler (stackdepth);
+  struct handler *h = push_handler (stack_depth_current ());
 
   if (setjmp (h->jmp))
     {
