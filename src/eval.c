@@ -3,7 +3,7 @@
 #include <stdio.h>
 
 #include "alloc.h"
-#include "debug.h"
+#include "print.h"
 #include "env.h"
 #include "error.h"
 #include "eval.h"

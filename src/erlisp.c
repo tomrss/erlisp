@@ -1,5 +1,5 @@
 #include "alloc.h"
-#include "debug.h"
+#include "print.h"
 #include "env.h"
 #include "eval.h"
 #include "lexer.h"

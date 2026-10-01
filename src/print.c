@@ -1,4 +1,4 @@
-#include "debug.h"
+#include "print.h"
 #include "lisp.h"
 
 // TODO very ugly, pls print to string not to stdout

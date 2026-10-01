@@ -1,5 +1,5 @@
 #include "../src/alloc.h"
-#include "../src/debug.h"
+#include "../src/print.h"
 #include "../src/env.h"
 #include "../src/eval.h"
 #include "../src/lisp.h"
