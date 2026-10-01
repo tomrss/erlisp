@@ -64,10 +64,11 @@ test_env_found ()
   Lisp_Object name = make_string ("test");
   Lisp_Object symb = make_symbol (name);
   Lisp_Object env;
-  env = env_new (l_globalenv, symb, box_int (123));
-  env = env_new (env, make_str_symbol ("just"), q_nil);
-  env = env_new (env, make_str_symbol ("to add"), q_nil);
-  env = env_new (env, make_str_symbol ("some vars"), q_nil);
+  env = env_new (l_globalenv);
+  env_define (env, symb, box_int (123));
+  env_define (env, make_str_symbol ("just"), q_nil);
+  env_define (env, make_str_symbol ("to add"), q_nil);
+  env_define (env, make_str_symbol ("some vars"), q_nil);
   Lisp_Object found = env_lookup (env, symb);
   TEST_ASSERT (!eq (found, q_nil), "found is nil");
   TEST_CHECK_TYPE ("found val", found, LISP_INTG);
@@ -82,10 +83,11 @@ static TestResult
 test_env_notfound ()
 {
   Lisp_Object env;
-  env = env_new (l_globalenv, make_str_symbol ("only"), q_nil);
-  env = env_new (env, make_str_symbol ("just"), q_nil);
-  env = env_new (env, make_str_symbol ("to add"), q_nil);
-  env = env_new (env, make_str_symbol ("some vars"), q_nil);
+  env = env_new (l_globalenv);
+  env_define (env, make_str_symbol ("only"), q_nil);
+  env_define (env, make_str_symbol ("just"), q_nil);
+  env_define (env, make_str_symbol ("to add"), q_nil);
+  env_define (env, make_str_symbol ("some vars"), q_nil);
   Lisp_Object found = env_lookup (env, make_str_symbol ("notexists!!"));
   TEST_ASSERT (eq (found, q_unbound), "found is not unbound");
   return TEST_RESULT_SUCCESS;
@@ -99,12 +101,14 @@ test_env_shadowing ()
   // lookup is by identity: shadowing binds the same symbol again
   Lisp_Object symb = make_str_symbol ("test");
   Lisp_Object parent, child;
-  parent = env_new (l_globalenv, symb, box_int (origval));
-  parent = env_new (parent, make_str_symbol ("just"), q_nil);
-  parent = env_new (parent, make_str_symbol ("to add"), q_nil);
-  child = env_new (parent, make_str_symbol ("some vars"), q_nil);
-  child = env_new (child, symb, box_int (shdwval));
-  child = env_new (child, make_str_symbol ("and some more"), q_nil);
+  parent = env_new (l_globalenv);
+  env_define (parent, symb, box_int (origval));
+  env_define (parent, make_str_symbol ("just"), q_nil);
+  env_define (parent, make_str_symbol ("to add"), q_nil);
+  child = env_new (parent);
+  env_define (child, make_str_symbol ("some vars"), q_nil);
+  env_define (child, symb, box_int (shdwval));
+  env_define (child, make_str_symbol ("and some more"), q_nil);
 
   Lisp_Object found1 = env_lookup (parent, symb);
   TEST_ASSERT (!eq (found1, q_nil), "original is nil");

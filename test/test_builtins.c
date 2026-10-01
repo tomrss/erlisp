@@ -18,7 +18,16 @@ static const char *symname (Lisp_Object symbol);
   TEST_ASSERT (eval_src (src, &res), "%s: unexpected %s", src,                \
                symname (f_error_symbol (res)))
 
-#define EXPECT_INT(src, expected)                                             \
+// for forms evaluated only for their side effects, e.g. a define
+#define EXPECT_NO_ERROR_SRC(src)                                              \
+  do                                                                          \
+    {                                                                         \
+      Lisp_Object _res;                                                       \
+      EXPECT_NO_ERROR (src, _res);                                            \
+    }                                                                         \
+  while (0)
+
+#define EXPECT_INT(src, expected)                                           \
   do                                                                          \
     {                                                                         \
       Lisp_Object _res;                                                       \
@@ -86,6 +95,16 @@ static TestResult test_builtins_if ();
 static TestResult test_builtins_when_unless ();
 static TestResult test_builtins_cond ();
 static TestResult test_builtins_let ();
+static TestResult test_builtins_define_recursion ();
+static TestResult test_builtins_define_noleak ();
+static TestResult test_builtins_define_in_if ();
+static TestResult test_builtins_define_shadow_arg ();
+static TestResult test_builtins_define_per_call ();
+static TestResult test_builtins_define_late ();
+static TestResult test_builtins_define_child_snapshot ();
+static TestResult test_builtins_define_global ();
+static TestResult test_builtins_load_global ();
+static TestResult test_builtins_load_error ();
 
 static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "car cdr", .run = test_builtins_car_cdr },
@@ -120,6 +139,16 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "when unless", .run = test_builtins_when_unless },
   { .skip = 0, .name = "cond", .run = test_builtins_cond },
   { .skip = 0, .name = "let let*", .run = test_builtins_let },
+  { .skip = 0, .name = "def recursion", .run = test_builtins_define_recursion },
+  { .skip = 0, .name = "def no leak", .run = test_builtins_define_noleak },
+  { .skip = 0, .name = "def in if", .run = test_builtins_define_in_if },
+  { .skip = 0, .name = "def shadow", .run = test_builtins_define_shadow_arg },
+  { .skip = 0, .name = "def per call", .run = test_builtins_define_per_call },
+  { .skip = 0, .name = "def late", .run = test_builtins_define_late },
+  { .skip = 0, .name = "def child snap", .run = test_builtins_define_child_snapshot },
+  { .skip = 0, .name = "def global", .run = test_builtins_define_global },
+  { .skip = 0, .name = "load global", .run = test_builtins_load_global },
+  { .skip = 0, .name = "load error", .run = test_builtins_load_error },
   {}, // terminator
 };
 
@@ -516,5 +545,130 @@ test_builtins_let ()
   // body is an implicit progn
   EXPECT_INT ("(let ((let-f 1)) let-f 5)", 5);
   EXPECT_INT ("(let () 7)", 7);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_recursion ()
+{
+  // the inner lambda captures the env of the call, so it sees its own name
+  EXPECT_NO_ERROR_SRC (
+      "(define def-rec (lambda (n)"
+      "  (define def-rec-loop (lambda (i acc)"
+      "    (if (eq? i 0) acc (def-rec-loop (- i 1) (+ acc 1)))))"
+      "  (def-rec-loop n 0)))");
+  EXPECT_INT ("(def-rec 5)", 5);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_noleak ()
+{
+  // the env of a call with no args is empty, but it is still local
+  EXPECT_NO_ERROR_SRC (
+      "(define def-noleak (lambda () (define def-noleak-x 1) def-noleak-x))");
+  EXPECT_INT ("(def-noleak)", 1);
+  EXPECT_ERROR ("def-noleak-x", q_error_unbound);
+
+  // same for a let with no bindings at top level
+  EXPECT_INT ("(let () (define def-let-x 1) def-let-x)", 1);
+  EXPECT_ERROR ("def-let-x", q_error_unbound);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_in_if ()
+{
+  // define changes the env of the body, not the frame of if
+  EXPECT_NO_ERROR_SRC (
+      "(define def-if (lambda (c) (if c (define def-if-x 1)) def-if-x))");
+  EXPECT_INT ("(def-if t)", 1);
+  EXPECT_ERROR ("(def-if nil)", q_error_unbound);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_shadow_arg ()
+{
+  // the define goes in front of the arg in the alist
+  EXPECT_NO_ERROR_SRC (
+      "(define def-shadow (lambda (def-shadow-x)"
+      "  (define def-shadow-x 2) def-shadow-x))");
+  EXPECT_INT ("(def-shadow 1)", 2);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_per_call ()
+{
+  // every call has its own env: closures do not share the inner define
+  EXPECT_NO_ERROR_SRC (
+      "(define def-mk (lambda (v) (define def-mk-x v) (lambda () def-mk-x)))");
+  EXPECT_NO_ERROR_SRC ("(define def-mk-c1 (def-mk 1))");
+  EXPECT_NO_ERROR_SRC ("(define def-mk-c2 (def-mk 2))");
+  EXPECT_INT ("(def-mk-c1)", 1);
+  EXPECT_INT ("(def-mk-c2)", 2);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_late ()
+{
+  // a closure sees the defines done later in the env it captured
+  EXPECT_NO_ERROR_SRC (
+      "(define def-late (lambda ()"
+      "  (define def-late-g (lambda () (def-late-h)))"
+      "  (define def-late-h (lambda () 7))"
+      "  (def-late-g)))");
+  EXPECT_INT ("(def-late)", 7);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_child_snapshot ()
+{
+  // a child env copies the bindings of the parent when it is created: the
+  // closure returned by def-snap-mk does not see def-snap-l, defined later
+  EXPECT_NO_ERROR_SRC (
+      "(define def-snap (lambda ()"
+      "  (define def-snap-mk (lambda () (lambda () (def-snap-l))))"
+      "  (define def-snap-c (def-snap-mk))"
+      "  (define def-snap-l (lambda () 1))"
+      "  (def-snap-c)))");
+  EXPECT_ERROR ("(def-snap)", q_error_unbound);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_global ()
+{
+  // a local define shadows the global without changing it
+  EXPECT_NO_ERROR_SRC ("(define def-glob 3)");
+  EXPECT_INT ("(let ((def-glob-y 1)) def-glob)", 3);
+  EXPECT_INT ("(let ((def-glob-y 1)) (define def-glob 4) def-glob)", 4);
+  EXPECT_INT ("def-glob", 3);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_load_global ()
+{
+  // load evaluates in global scope even when called from a lambda
+  EXPECT_NO_ERROR_SRC (
+      "(define load-global (lambda ()"
+      "  (load \"test/assets/src-load-global.tl\")))");
+  EXPECT_NO_ERROR_SRC ("(load-global)");
+  EXPECT_INT ("load-global-a", 1);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_load_error ()
+{
+  // the definitions before the error survive the unwinding of load
+  EXPECT_ERROR ("(load \"test/assets/src-load-error.tl\")",
+                f_intern (make_string ("load-test-error")));
+  EXPECT_INT ("load-error-c", 1);
+  EXPECT_ERROR ("load-error-d", q_error_unbound);
   return TEST_RESULT_SUCCESS;
 }

@@ -606,17 +606,12 @@ f_load (Lisp_Object path)
     {
       // load evaluates always in global scope:
       // that's how it's done in emacs and scheme
-      eval (env_current (), form);
+      eval (l_globalenv, form);
     }
 
   lex_close (l);
   fclose (f);
 
-  // propagate environment to parent, otherwise definitions in loaded file
-  // would be lost
-  stack_parent_set_env (env_current ());
-
-  // TODO all errors not handled yet
   return q_t;
 }
 
@@ -793,9 +788,13 @@ assoc_w_pred (Lisp_Object key, Lisp_Object alist,
               Lisp_Object (*keypred) (Lisp_Object k1, Lisp_Object k2))
 {
   Lisp_Object tail;
-  for (tail = alist; !eq (tail, q_nil); tail = f_cdr (tail))
+  for (tail = alist; !nil (tail); tail = f_cdr (tail))
     {
       Lisp_Object elt = f_car (tail);
+      if (type_of (elt) != LISP_CONS)
+        // ignore it: emacs does this, other lisps error. i like this
+        // because its flexible and easy to implement
+        continue;
       if (keypred (f_car (elt), key) != q_nil)
         return elt;
     }
@@ -810,6 +809,10 @@ rassoc_w_pred (Lisp_Object key, Lisp_Object alist,
   for (tail = alist; tail != q_nil; tail = f_cdr (tail))
     {
       Lisp_Object elt = f_car (tail);
+      if (type_of (elt) != LISP_CONS)
+        // ignore it: emacs does this, other lisps error. i like this
+        // because its flexible and easy to implement
+        continue;
       if (keypred (f_cdr (elt), key) != q_nil)
         return elt;
     }

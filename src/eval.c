@@ -45,22 +45,6 @@ stack_walk (void (*fun) (struct stackframe))
     fun (stack[i]);
 }
 
-void
-stack_parent_set_env (Lisp_Object env)
-{
-  int effind = stackdepth > 1 ? stackdepth - 2 : 0;
-
-  stack[effind].env = env;
-}
-
-void
-stack_current_set_env (Lisp_Object env)
-{
-  // TODO unmark gc?
-  // TODO cannot rememember why i wrote the TODO above ??
-  stack[stackdepth - 1].env = env;
-}
-
 // TODO wtf is this function??
 struct stackframe
 stack_pop_free ()
@@ -359,18 +343,19 @@ Lisp_Object
 call_lambda (Lisp_Lambda *ulambda, Lisp_Object *argvals)
 {
   // create a new environment binding lambda arg symbols to actual values
-  Lisp_Object lambdaenv = ulambda->env;
+  Lisp_Object env = env_new (ulambda->env);
   for (int i = 0; i < ulambda->maxargs; i++)
     {
       Lisp_Object argsym = ulambda->args[i];
       Lisp_Object argval = argvals[i];
-      lambdaenv = env_new (lambdaenv, argsym, argval);
+      env_define (env, argsym, argval);
     }
 
-  stack_current_set_env (lambdaenv);
+  // set lambda env in current stack for protecting from GC.
+  stack[stackdepth - 1].env = env;
 
   // recursively eval the lambda body
-  return progn (lambdaenv, ulambda->form);
+  return progn (env, ulambda->form);
 }
 
 Lisp_Object
@@ -385,9 +370,6 @@ progn (Lisp_Object env, Lisp_Object form)
     {
       val = eval (env, f_car (tail));
       tail = f_cdr (tail);
-      // reload env from the stack, as prviously evalled form could have
-      // changed it!
-      env = env_current ();
     }
 
   return val;
@@ -399,7 +381,7 @@ let (Lisp_Object env, Lisp_Object form)
   Lisp_Object args = f_car (form);
   Lisp_Object argstail = args;
   Lisp_Object body = f_cdr (form);
-  Lisp_Object letenv = env;
+  Lisp_Object letenv = env_new (env);
   Lisp_Object argform, argsym, argval;
 
   stack_push (
@@ -415,9 +397,8 @@ let (Lisp_Object env, Lisp_Object form)
       unbox_symbol (argsym)->localbound = 1;
 
       argval = eval (letenv, f_car (f_cdr (argform)));
-      letenv = env_new (letenv, argsym, argval);
+      env_define (letenv, argsym, argval);
       argstail = f_cdr (argstail);
-      stack_current_set_env (letenv);
     }
 
   Lisp_Object res = progn (letenv, body);
@@ -433,7 +414,7 @@ define (Lisp_Object env, Lisp_Object form)
   check_type (var, LISP_SYMB);
   Lisp_Object value = eval (env, f_car (f_cdr (form)));
 
-  if (nil (env))
+  if (eq (env, l_globalenv))
     {
       // top level: define in global
       unbox_symbol (var)->value = value;
@@ -441,14 +422,7 @@ define (Lisp_Object env, Lisp_Object form)
   else
     {
       unbox_symbol (var)->localbound = 1;
-      Lisp_Object newenv = env_new (env, var, value);
-
-      // TODO this is not thread safe :(
-      // TODO this seems very wrong
-
-      // set new env in the parent stack (the current is the one in which
-      // "define" is evalled and will die afterwards
-      stack_parent_set_env (newenv);
+      env_define (env, var, value);
     }
 
   return value;

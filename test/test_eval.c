@@ -279,7 +279,8 @@ test_eval_lambda_2args ()
   subrcons = DEFSUBR ("cons", 2, 2, f_cons);
 
   // bind arg1 in parent env to verify the lambda arg shadows it
-  env = env_new (l_globalenv, arg1, box_int (998));
+  env = env_new (l_globalenv);
+  env_define (env, arg1, box_int (998));
 
   lambdabody = f_cons (
       f_cons (subrcons, f_cons (make_string ("not return"),

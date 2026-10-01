@@ -1,7 +1,6 @@
 #include "alloc.h"
 #include "blkalloc.h"
 #include "debug.h"
-#include "env.h"
 #include "error.h"
 #include "eval.h"
 #include "lisp.h"

@@ -20,8 +20,6 @@ struct stackframe stack_pop ();
 struct stackframe stack_pop_free ();
 struct stackframe stack_current ();
 void stack_walk (void (*fun) (struct stackframe));
-void stack_current_set_env (Lisp_Object env);
-void stack_parent_set_env (Lisp_Object env);
 
 Lisp_Object eval (Lisp_Object env, Lisp_Object form);
 Lisp_Object eval_symbol (Lisp_Object env, Lisp_Object form);
