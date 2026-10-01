@@ -124,14 +124,10 @@ call_function (Lisp_Object env, Lisp_Object form)
   int maxargs;
   const char *fname;
 
-  Lisp_Object funsym = f_car (form);
+  Lisp_Object funyielding = f_car (form);
   Lisp_Object funargs = f_cdr (form);
 
-  // TODO this is temp: we support for now calling functions attached to a
-  // symbol only.
-  check_type (funsym, LISP_SYMB);
-
-  Lisp_Object fun = eval_symbol (env, funsym);
+  Lisp_Object fun = eval (env, funyielding);
 
   switch (type_of (fun))
     {
@@ -145,11 +141,14 @@ call_function (Lisp_Object env, Lisp_Object form)
       lambda = unbox_lambda (fun);
       minargs = lambda->minargs;
       maxargs = lambda->maxargs;
-      fname = unbox_string (unbox_symbol (funsym)->name)->data;
+      if (type_of (funyielding) == LISP_SYMB)
+        fname = unbox_string (unbox_symbol (funyielding)->name)->data;
+      else
+        fname = "anonymous";
       break;
     default:
       debug_printf ("funcsym: ");
-      debug_print_form (funsym);
+      debug_print_form (funyielding);
       debug_printf ("\nfun: ");
       debug_print_form (fun);
       debug_printf ("\n");
