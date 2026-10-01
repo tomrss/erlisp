@@ -192,6 +192,15 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
 }
 
 Lisp_Object
+f_setq (Lisp_Object symbol, Lisp_Object value)
+{
+  check_type (symbol, LISP_SYMB);
+
+  env_define (env_current (), symbol, value);
+  return value;
+}
+
+Lisp_Object
 f_string_equal_p (Lisp_Object x, Lisp_Object y)
 {
   check_type (x, LISP_STRG);
@@ -739,6 +748,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("cddr", 1, 1, f_cddr));
   obarray_put (o, DEFSUBR ("eq?", 2, 2, f_eq_p));
   obarray_put (o, DEFSUBR ("equal?", 2, 2, f_equal_p));
+  obarray_put (o, DEFSUBR ("set!", 2, 2, f_setq));
   obarray_put (o, DEFSUBR ("eval", 1, 1, f_eval));
   obarray_put (o, DEFSUBR ("assoc", 2, 2, f_assoc));
   obarray_put (o, DEFSUBR ("assq", 2, 2, f_assq));
