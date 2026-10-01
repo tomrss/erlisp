@@ -12,6 +12,8 @@
 #define VALBITS (INTBITS - TAGBITS)
 #define VALMASK (~TAGMASK)
 
+// TODO misleading name: our lisp does NOT have null, it only has nil that is a
+// proper symbol. rename or delete this
 #define LISP_NULL 0
 #define MANY 999
 #define UNEVALLED 888
@@ -32,8 +34,8 @@
 #define BOOL(expr) (expr) ? q_t : q_nil
 
 #ifdef __GNUC__
-#define UNUSED __attribute__((__unused__))
-#define NORETURN __attribute__((__noreturn__))
+#define UNUSED __attribute__ ((__unused__))
+#define NORETURN __attribute__ ((__noreturn__))
 #else /* __GNUC__ */
 #define UNUSED
 #endif /* __GNUC__ */

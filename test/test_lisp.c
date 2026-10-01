@@ -332,7 +332,7 @@ test_lisp_vector ()
 
   for (size_t i = 0; i < len; i++)
     {
-      if (uvec->contents[i] != LISP_NULL)
+      if (uvec->contents[i] != q_nil)
         return TEST_RESULT_FAIL ("vec not initialized correctly");
     }
 

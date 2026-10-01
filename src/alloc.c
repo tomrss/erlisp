@@ -115,7 +115,7 @@ make_vector (size_t size)
   vec->gcmark = 0;
 
   for (size_t i = 0; i < size; ++i)
-    vec->contents[i] = LISP_NULL;
+    vec->contents[i] = q_nil;
 
   return box_vector (vec);
 }
