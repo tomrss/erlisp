@@ -19,8 +19,8 @@ TEST_OBJECTS := $(patsubst $(TEST_DIR)/test_%.c,$(OBJ_DIR)/test_%.o,$(TEST_SOURC
 
 all: $(TARGET)
 
-debug: CFLAGS += -g -fsanitize=address
-debug: LDFLAGS += -g
+debug: CFLAGS = -Wall -Wextra -O0 -g -fsanitize=address -DHAVE_READLINE=1
+debug: LDFLAGS = -g -fsanitize=address
 debug: LDLIBS += -fsanitize=address
 debug: $(TARGET)
 
