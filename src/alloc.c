@@ -29,6 +29,7 @@ blkallocator *all_smalllambda;
 struct varsizeblk
 {
   Lisp_Object obj;
+  size_t allocsize;
   struct varsizeblk *next;
 };
 
@@ -103,6 +104,7 @@ make_vector (size_t size)
       vec = malloc (allocsize);
       struct varsizeblk *blk = malloc (sizeof (struct varsizeblk));
       blk->obj = box_vector (vec);
+      blk->allocsize = allocsize;
       blk->next = varsizeheap;
       varsizeheap = blk;
       varsizeheaplength++;
@@ -150,6 +152,7 @@ make_uninit_string (size_t size)
       string = malloc (allocsize);
       struct varsizeblk *blk = malloc (sizeof (struct varsizeblk));
       blk->obj = box_string (string);
+      blk->allocsize = allocsize;
       blk->next = varsizeheap;
       varsizeheap = blk;
       varsizeheaplength++;
@@ -220,6 +223,7 @@ make_lambda (int minargs, int maxargs, Lisp_Object *args, Lisp_Object form)
       lambda = malloc (allocsize);
       struct varsizeblk *blk = malloc (sizeof (struct varsizeblk));
       blk->obj = box_lambda (lambda);
+      blk->allocsize = allocsize;
       blk->next = varsizeheap;
       varsizeheap = blk;
       varsizeheaplength++;
@@ -419,7 +423,7 @@ gcsweep ()
       next = blk->next;
       if (is_obj_unmarked (blk->obj))
         {
-          size_t freesize = sizeof (unbox_pointer (blk->obj));
+          size_t freesize = blk->allocsize;
           free_lisp_obj (blk->obj);
 
           // pop from var size heap
