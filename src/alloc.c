@@ -110,6 +110,7 @@ make_vector (size_t size)
     }
 
   vec->size = size;
+  vec->gcmark = 0;
 
   for (size_t i = 0; i < size; ++i)
     vec->contents[i] = LISP_NULL;
@@ -276,7 +277,6 @@ gc_maybe ()
     return 0;
   gcwait = 0;
 
-
   // TODO defines
   const float growthreshold = 5.;
   const size_t minheap = 16 * 1024 * 1024;
@@ -354,6 +354,8 @@ gcmarkobj (Lisp_Object obj)
       if (unbox_vector (obj)->gcmark == 1)
         break;
       unbox_vector (obj)->gcmark = 1;
+      for (size_t i = 0; i < unbox_vector (obj)->size; i++)
+        gcmarkobj (unbox_vector (obj)->contents[i]);
       break;
     case LISP_INTG:
     case LISP_SUBR:
