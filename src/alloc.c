@@ -426,6 +426,10 @@ gcsweep ()
             // pop from start
             varsizeheap = blk->next;
           blk->next = NULL;
+          // TODO we have to free both object and block. what about a
+          // varsizeblk containing actual object data with flex arr
+          // member instead of just the pointer?
+          free (blk);
 
           varsizeheaplength--;
           varsizeheapsize -= freesize;
