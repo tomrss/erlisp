@@ -346,6 +346,8 @@ gcmarkobj (Lisp_Object obj)
         break;
       unbox_cons (obj)->gcmark = 1;
       gcmarkobj (f_car (obj));
+      // FIXME in case of a long list, this recursion could be FATAL.
+      // replace this with explicit iteration on the cdr
       gcmarkobj (f_cdr (obj));
       break;
     case LISP_VECT:
