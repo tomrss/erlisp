@@ -82,7 +82,7 @@ eval (Lisp_Object env, Lisp_Object form)
 Lisp_Object
 eval_symbol (Lisp_Object env, Lisp_Object symbol)
 {
-  if (eq (symbol, q_t) || eq (symbol, q_nil) || eq (symbol, q_unbound))
+  if (eq (symbol, q_t) || nil (symbol) || unbound (symbol))
     return symbol;
 
   Lisp_Object val;
@@ -95,19 +95,19 @@ eval_symbol (Lisp_Object env, Lisp_Object symbol)
       // bother looking up the symbol in env: we return its global
       // value, that by definition is stored in the symbol itself
       val = usymbol->value;
-      if (eq (val, q_unbound))
+      if (unbound (val))
         unbound_error (symbol);
       return val;
     }
 
   // lookup symbol in env
   val = env_lookup (env, symbol);
-  if (!eq (val, q_unbound))
+  if (!unbound (val))
     return val;
 
   // return value attached to symbol (global)
   val = unbox_symbol (symbol)->value;
-  if (!eq (val, q_unbound))
+  if (!unbound (val))
     return val;
 
   unbound_error (symbol);
@@ -311,7 +311,7 @@ progn (Lisp_Object env, Lisp_Object form)
   Lisp_Object val = q_nil;
   Lisp_Object tail = form;
 
-  while (!eq (tail, q_nil))
+  while (!nil (tail))
     {
       val = eval (env, f_car (tail));
       tail = f_cdr (tail);
@@ -332,7 +332,7 @@ let (Lisp_Object env, Lisp_Object form)
   stack_push (
       (struct stackframe){ .fname = "let", .env = letenv, .form = form });
 
-  while (!eq (argstail, q_nil))
+  while (!nil (argstail))
     {
       argform = f_car (argstail);
       argsym = f_car (argform);

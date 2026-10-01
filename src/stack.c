@@ -71,7 +71,7 @@ stack_unwind (int depthfrom, void (*fun) (struct stackframe))
 
       Lisp_Object cell = f_cons (make_string (sf.fname), q_nil);
 
-      if (eq (backtrace, q_nil))
+      if (nil (backtrace))
         backtrace = cell;
       else
         f_setcdr (tail, cell);

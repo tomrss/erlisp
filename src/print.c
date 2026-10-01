@@ -12,7 +12,7 @@ print_form (Lisp_Object form)
 void
 fprint_form (FILE *stream, Lisp_Object form)
 {
-  if (eq (form, q_nil))
+  if (nil (form))
     {
       fprintf (stream, "NIL");
       return;
@@ -22,7 +22,7 @@ fprint_form (FILE *stream, Lisp_Object form)
       fprintf (stream, "T");
       return;
     }
-  if (eq (form, q_unbound))
+  if (unbound (form))
     {
       fprintf (stream, "UNBOUND");
       return;
@@ -79,7 +79,7 @@ print_error (Lisp_Object err)
         fprintf (stderr, " ");
         fprint_form (stderr, unbox_cons (tail)->car);
       }
-  else if (!eq (data, q_nil))
+  else if (!nil (data))
     {
       fprintf (stderr, " ");
       fprint_form (stderr, data);
@@ -90,7 +90,7 @@ print_error (Lisp_Object err)
   Lisp_Object tail = backtrace;
 
   fprintf (stderr, "Backtrace:\n");
-  while (!eq (tail, q_nil))
+  while (!nil (tail))
     {
       const char *fname = unbox_string (f_car (tail))->data;
       fprintf (stderr, " at %s\n", fname);

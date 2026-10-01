@@ -298,7 +298,7 @@ f_concat (int argc, Lisp_Object *argv)
 Lisp_Object
 f_length (Lisp_Object list)
 {
-  if (eq (list, q_nil))
+  if (nil (list))
     return 0;
 
   if (type_of (list) == LISP_CONS)
@@ -306,7 +306,7 @@ f_length (Lisp_Object list)
       int64_t length = 0;
       Lisp_Object tail = list;
 
-      while (!eq (tail, q_nil))
+      while (!nil (tail))
         {
           tail = f_cdr (tail);
           length++;
@@ -586,7 +586,7 @@ f_format (int argc, Lisp_Object *argv)
       printf ("\n");
       return q_nil;
     }
-  if (eq (dest, q_nil))
+  if (nil (dest))
     {
       // return fmt string
       return fmt;

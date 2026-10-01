@@ -383,4 +383,10 @@ nil (Lisp_Object o)
   return eq (o, q_nil);
 }
 
+static inline int
+unbound (Lisp_Object o)
+{
+  return eq (o, q_unbound);
+}
+
 #endif // LISP_H
