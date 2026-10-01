@@ -159,6 +159,7 @@ struct lisp_lambda
   char gcmark;
   int minargs;
   int maxargs;
+  Lisp_Object env;
   Lisp_Object form;
   Lisp_Object args[];
 };
@@ -345,7 +346,7 @@ Lisp_Object f_error_symbol (Lisp_Object err);
 Lisp_Object f_error_backtrace (Lisp_Object err);
 Lisp_Object f_error_data (Lisp_Object err);
 Lisp_Object f_intern (Lisp_Object name);
-Lisp_Object f_gc ();
+Lisp_Object f_gc (Lisp_Object printmemstats);
 Lisp_Object f_memstats ();
 Lisp_Object f_memdump ();
 

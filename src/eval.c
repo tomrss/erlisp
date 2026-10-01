@@ -297,7 +297,7 @@ call_function (Lisp_Object env, Lisp_Object form)
   if (type_of (fun) == LISP_SUBR)
     result = call_subr (subr, maxargs, arity, argvals);
   else // is lambda
-    result = call_lambda (env, lambda, argvals);
+    result = call_lambda (lambda, argvals);
 
   stack_pop_free ();
 
@@ -356,10 +356,10 @@ call_subr (Lisp_Subr *usubr, int maxargs, int arity, Lisp_Object *argvals)
 }
 
 Lisp_Object
-call_lambda (Lisp_Object env, Lisp_Lambda *ulambda, Lisp_Object *argvals)
+call_lambda (Lisp_Lambda *ulambda, Lisp_Object *argvals)
 {
   // create a new environment binding lambda arg symbols to actual values
-  Lisp_Object lambdaenv = env;
+  Lisp_Object lambdaenv = ulambda->env;
   for (int i = 0; i < ulambda->maxargs; i++)
     {
       Lisp_Object argsym = ulambda->args[i];
@@ -440,6 +440,7 @@ define (Lisp_Object env, Lisp_Object form)
     }
   else
     {
+      unbox_symbol (var)->localbound = 1;
       Lisp_Object newenv = env_new (env, var, value);
 
       // TODO this is not thread safe :(

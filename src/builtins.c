@@ -555,7 +555,7 @@ f_lambda (Lisp_Object form)
     }
 
   // TODO &optional and &re st
-  return make_lambda (nargs, nargs, argv, body);
+  return make_lambda (nargs, nargs, env_current (), argv, body);
 }
 
 Lisp_Object
@@ -660,8 +660,14 @@ f_intern (Lisp_Object name)
 }
 
 Lisp_Object
-f_gc ()
+f_gc (Lisp_Object printmemstats)
 {
+  if (nil (printmemstats))
+    {
+      gc ();
+      return q_nil;
+    }
+
   printf ("before GC:\n");
   print_memstats (memstats ());
   struct memstats stats = gc ();
@@ -775,7 +781,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("error-symbol", 1, 1, f_error_symbol));
   obarray_put (o, DEFSUBR ("error-backtrace", 1, 1, f_error_backtrace));
   obarray_put (o, DEFSUBR ("error-data", 1, 1, f_error_data));
-  obarray_put (o, DEFSUBR ("gc", 0, 0, f_gc));
+  obarray_put (o, DEFSUBR ("gc", 0, 1, f_gc));
   obarray_put (o, DEFSUBR ("memstats", 0, 0, f_memstats));
   obarray_put (o, DEFSUBR ("memdump", 0, 0, f_memdump));
 }

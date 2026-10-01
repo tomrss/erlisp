@@ -199,7 +199,7 @@ make_subr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
   // plain allocation, SUBR is not subject to memory management and gc
   Lisp_Subr *subr = malloc (sizeof (Lisp_Subr));
 
-  subr->name = name; // TODO probably safer to copy name
+  subr->name = name; // TODO probably safer to copy name // TODO2 never had problem with this, probably fine this way?
   subr->function = fun;
   subr->minargs = minargs;
   subr->maxargs = maxargs;
@@ -208,7 +208,8 @@ make_subr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 }
 
 Lisp_Object
-make_lambda (int minargs, int maxargs, Lisp_Object *args, Lisp_Object form)
+make_lambda (int minargs, int maxargs, Lisp_Object env, Lisp_Object *args,
+             Lisp_Object form)
 {
   Lisp_Lambda *lambda;
   // TODO maybe use a lisp list args instead of c array?
@@ -232,6 +233,7 @@ make_lambda (int minargs, int maxargs, Lisp_Object *args, Lisp_Object form)
 
   lambda->minargs = minargs;
   lambda->maxargs = maxargs;
+  lambda->env = env;
   for (int i = 0; i < maxargs; i++)
     lambda->args[i] = args[i];
   lambda->form = form;
@@ -341,6 +343,7 @@ gcmarkobj (Lisp_Object obj)
       unbox_lambda (obj)->gcmark = 1;
       // TODO arg list as lisp list? -> add here gcmark of that
       gcmarkobj (unbox_lambda (obj)->form);
+      gcmarkobj (unbox_lambda (obj)->env);
       for (int i = 0; i < unbox_lambda (obj)->maxargs; i++)
         gcmarkobj (unbox_lambda (obj)->args[i]);
       break;
@@ -371,7 +374,7 @@ static void
 gcmarkstackframe (struct stackframe sf)
 {
   gcmarkobj (sf.form);
-  // gcmarkobj (sf.env); probably needed when implementing lexical scoping
+  gcmarkobj (sf.env);
   for (int j = 0; j < sf.nargs; j++)
     gcmarkobj (sf.argvals[j]);
 }
@@ -379,10 +382,6 @@ gcmarkstackframe (struct stackframe sf)
 static void
 gcmark ()
 {
-  // current env is a gc root
-  // with dynamic scope every env is contained in this one
-  gcmarkobj (env_current ());
-
   // code that is being evaluated in the stack is a gc root
   stack_walk (gcmarkstackframe);
 
