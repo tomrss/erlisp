@@ -89,10 +89,15 @@ typedef Lisp_Object (*lisp_subr_fun_many) (int argc, Lisp_Object *argv);
   They screw alignment of structs, causing weird padding of all types,
   incrementing memory usage and cpu cycles by a lot.
  */
+/*
+  TODO 2: block allocator now handles its onw gcmarks in its own
+  structures.  but var size heap still need it. this is TEMPORARY just
+  to separate work; var size heap alloc will be rewritten and every gc
+  mark here removed.
+ */
 
 struct lisp_cons
 {
-  char gcmark;
   Lisp_Object car;
   Lisp_Object cdr;
 };
@@ -106,7 +111,6 @@ struct lisp_string
 
 struct lisp_symbol
 {
-  char gcmark;
   // whether symbol has let or lambda local bindings; if false, it is global
   char localbound;
   Lisp_Object name;
@@ -147,7 +151,6 @@ union lisp_subr_fun
 
 struct lisp_subr
 {
-  // no gc mark, subr cannot be gc'd
   const char *name;
   union lisp_subr_fun function;
   int minargs;

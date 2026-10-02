@@ -1,8 +1,8 @@
 #include "alloc.h"
 #include "blkalloc.h"
-#include "print.h"
 #include "error.h"
 #include "lisp.h"
+#include "print.h"
 #include "stack.h"
 #include <stddef.h>
 #include <stdio.h>
@@ -40,14 +40,10 @@ static struct memstats lastgcstats;
 static unsigned long gcgen;
 
 static int is_obj_unmarked (Lisp_Object obj);
-static int is_cons_unmarked (void *ptr);
-static int is_symbol_unmarked (void *ptr);
 static int is_string_unmarked (void *ptr);
 static int is_vector_unmarked (void *ptr);
 static int is_lambda_unmarked (void *ptr);
 static void unmark_obj (Lisp_Object obj);
-static void unmark_cons (void *ptr);
-static void unmark_symbol (void *ptr);
 static void unmark_string (void *ptr);
 static void unmark_vector (void *ptr);
 static void unmark_lambda (void *ptr);
@@ -62,14 +58,14 @@ void
 init_alloc ()
 {
   // fixed-sized types: block size is the size of struct
-  all_cons = blkalloc_init (sizeof (Lisp_Cons), is_cons_unmarked);
-  all_symbol = blkalloc_init (sizeof (Lisp_Symbol), is_symbol_unmarked);
+  all_cons = blkalloc_init (sizeof (Lisp_Cons));
+  all_symbol = blkalloc_init (sizeof (Lisp_Symbol));
   // variable-sized types: small objects will be padded in blocks of
   // fixed size. the block size is the size of a flexible array with N
   // elements
-  all_smallstring = blkalloc_init (SMALL_STRG_SIZE, is_string_unmarked);
-  all_smallvector = blkalloc_init (SMALL_VECT_SIZE, is_vector_unmarked);
-  all_smalllambda = blkalloc_init (SMALL_LMBD_SIZE, is_lambda_unmarked);
+  all_smallstring = blkalloc_init (SMALL_STRG_SIZE);
+  all_smallvector = blkalloc_init (SMALL_VECT_SIZE);
+  all_smalllambda = blkalloc_init (SMALL_LMBD_SIZE);
 
   lastgcstats = (struct memstats){};
   gcgen = 0;
@@ -82,7 +78,6 @@ make_cons (Lisp_Object car, Lisp_Object cdr)
 
   cons->car = car;
   cons->cdr = cdr;
-  cons->gcmark = 0;
 
   return box_cons (cons);
 }
@@ -174,7 +169,6 @@ make_symbol (Lisp_Object name)
   symbol->name = name;
   symbol->value = q_unbound;
   symbol->next = NULL;
-  symbol->gcmark = 0;
   symbol->localbound = 0;
 
   return box_symbol (symbol);
@@ -198,7 +192,8 @@ make_subr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
   // plain allocation, SUBR is not subject to memory management and gc
   Lisp_Subr *subr = malloc (sizeof (Lisp_Subr));
 
-  subr->name = name; // TODO probably safer to copy name // TODO2 never had problem with this, probably fine this way?
+  subr->name = name; // TODO probably safer to copy name // TODO2 never had
+                     // problem with this, probably fine this way?
   subr->function = fun;
   subr->minargs = minargs;
   subr->maxargs = maxargs;
@@ -249,11 +244,11 @@ defsubr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 
   Lisp_Object subr = make_subr (name, minargs, maxargs, fun);
   Lisp_Object symb = make_str_symbol (name);
-  {
-    // TODO implement pure storage and remove this HORROR
-    unbox_symbol (symb)->gcmark = 1;
-    unbox_string (unbox_symbol (symb)->name)->gcmark = 1;
-  }
+  /* { */
+  /*   // TODO implement pure storage and remove this HORROR */
+  /*   unbox_symbol (symb)->gcmark = 1; */
+  /*   unbox_string (unbox_symbol (symb)->name)->gcmark = 1; */
+  /* } */
   unbox_symbol (symb)->value = subr;
   return symb;
 }
@@ -284,7 +279,7 @@ gc_maybe ()
 
   // TODO defines
   const float growthreshold = 5.;
-  const size_t minheap = 16 * 1024 * 1024;
+  const size_t minheap = PAGE_SIZE * 16;
   const size_t maxheap = 256 * 1024 * 1024;
 
   size_t used = current_used_size ();
@@ -325,21 +320,29 @@ gcmarkobj (Lisp_Object obj)
   switch (type_of (obj))
     {
     case LISP_STRG:
-      if (unbox_string (obj)->gcmark == 1)
-        break;
-      unbox_string (obj)->gcmark = 1;
+      if (unbox_string (obj)->size < SMALL_STRG_NCHRS)
+        blkgcmark (all_smallstring, unbox_string (obj));
+      else
+        unbox_string (obj)->gcmark = 1;
       break;
     case LISP_SYMB:
-      if (unbox_symbol (obj)->gcmark == 1)
+      if (!blkgcmark (all_symbol, unbox_symbol (obj)))
         break;
-      unbox_symbol (obj)->gcmark = 1;
       gcmarkobj (unbox_symbol (obj)->name);
       gcmarkobj (unbox_symbol (obj)->value);
       break;
     case LISP_LMBD:
-      if (unbox_lambda (obj)->gcmark == 1)
-        break;
-      unbox_lambda (obj)->gcmark = 1;
+      if (unbox_lambda (obj)->maxargs <= SMALL_LMBD_NARGS)
+        {
+          if (!blkgcmark (all_smalllambda, unbox_lambda (obj)))
+            break;
+        }
+      else
+        {
+          if (unbox_lambda (obj)->gcmark == 1)
+            break;
+          unbox_lambda (obj)->gcmark = 1;
+        }
       // TODO arg list as lisp list? -> add here gcmark of that
       gcmarkobj (unbox_lambda (obj)->form);
       gcmarkobj (unbox_lambda (obj)->env);
@@ -347,19 +350,25 @@ gcmarkobj (Lisp_Object obj)
         gcmarkobj (unbox_lambda (obj)->args[i]);
       break;
     case LISP_CONS:
-      // TODO
-      if (unbox_cons (obj)->gcmark == 1)
+      if (!blkgcmark (all_cons, unbox_cons (obj)))
         break;
-      unbox_cons (obj)->gcmark = 1;
       gcmarkobj (f_car (obj));
       // FIXME in case of a long list, this recursion could be FATAL.
       // replace this with explicit iteration on the cdr
       gcmarkobj (f_cdr (obj));
       break;
     case LISP_VECT:
-      if (unbox_vector (obj)->gcmark == 1)
-        break;
-      unbox_vector (obj)->gcmark = 1;
+      if (unbox_vector (obj)->size < SMALL_VECT_NELTS)
+        {
+          if (!blkgcmark (all_smallvector, unbox_vector (obj)))
+            break;
+        }
+      else
+        {
+          if (unbox_vector (obj)->gcmark == 1)
+            break;
+          unbox_vector (obj)->gcmark = 1;
+        }
       for (size_t i = 0; i < unbox_vector (obj)->size; i++)
         gcmarkobj (unbox_vector (obj)->contents[i]);
       break;
@@ -406,11 +415,11 @@ gcsweep ()
 {
   // sweep fixed blk memory
   // TODO: let blkallocator take care of it by itself??
-  blkgc (all_cons);
-  blkgc (all_symbol);
-  blkgc (all_smallstring);
-  blkgc (all_smallvector);
-  blkgc (all_smalllambda);
+  blkgcsweep (all_cons);
+  blkgcsweep (all_symbol);
+  blkgcsweep (all_smallstring);
+  blkgcsweep (all_smallvector);
+  blkgcsweep (all_smalllambda);
 
   // sweep variable sized heap
   struct varsizeblk *blk = varsizeheap;
@@ -454,11 +463,8 @@ static void
 gcunmark ()
 {
   // unmark fixed block memory
-  blkwalk (all_cons, unmark_cons);
-  blkwalk (all_symbol, unmark_symbol);
-  blkwalk (all_smallstring, unmark_string);
-  blkwalk (all_smallvector, unmark_vector);
-  blkwalk (all_smalllambda, unmark_lambda);
+  // TODO this is done by blkallocator in sweep phase, remove this function one
+  // day
 
   // unmark variable sized heap
   struct varsizeblk *blk = varsizeheap;
@@ -506,23 +512,23 @@ last_gcgen_used_size ()
 static void
 print_blkmemstats (const char *name, blkmemstats st)
 {
-  printf (" %-14s: %3lu pages (%6zu B), %4lu free (%6zu B), %4lu used (%6zu "
+  printf (" %-14s: %3lu pages (%6zu B), %4lu used (%6zu "
           "B)\n",
-          name, st.numpages, st.sizepages, st.numfree, st.sizefree, st.numused,
-          st.sizeused);
+          name, st.numpages, st.sizepages, st.numused, st.sizeused);
 };
 
 void
 print_memstats (struct memstats stats)
 {
+  // TODO
   printf ("Fixed memory blocks:\n");
   size_t freesize = 0;
-  struct blk *blk = all_cons->freelist;
-  while (blk)
-    {
-      freesize++;
-      blk = blk->next;
-    }
+  /* struct blk *blk = all_cons->freelist; */
+  /* while (blk) */
+  /*   { */
+  /*     freesize++; */
+  /*     blk = blk->next; */
+  /*   } */
   printf ("real cons freelist size: %zu\n", freesize);
   print_blkmemstats ("conses", stats.conses);
   print_blkmemstats ("symbols", stats.symbols);
@@ -561,6 +567,8 @@ memdump ()
     }
 }
 
+// TODO below this point we be erased one day
+
 static void
 unmark_obj (Lisp_Object obj)
 {
@@ -568,12 +576,6 @@ unmark_obj (Lisp_Object obj)
     {
     case LISP_STRG:
       unmark_string (unbox_string (obj));
-      break;
-    case LISP_SYMB:
-      unmark_symbol (unbox_symbol (obj));
-      break;
-    case LISP_CONS:
-      unmark_cons (unbox_cons (obj));
       break;
     case LISP_VECT:
       unmark_vector (unbox_vector (obj));
@@ -584,25 +586,11 @@ unmark_obj (Lisp_Object obj)
     case LISP_INTG:
     case LISP_SUBR:
       break;
+    case LISP_SYMB:
+    case LISP_CONS:
+      internal_error (
+          "Shouldn't be here. Symbol and cons are gc'ed by blkalloc");
     }
-}
-
-static void
-unmark_cons (void *ptr)
-{
-  if (!ptr)
-    return;
-  Lisp_Cons *l = ptr;
-  l->gcmark = 0;
-}
-
-static void
-unmark_symbol (void *ptr)
-{
-  if (!ptr)
-    return;
-  Lisp_Symbol *l = ptr;
-  l->gcmark = 0;
 }
 
 static void
@@ -642,43 +630,17 @@ is_obj_unmarked (Lisp_Object obj)
       return 0;
     case LISP_STRG:
       return is_string_unmarked (unbox_string (obj));
-    case LISP_SYMB:
-      return is_symbol_unmarked (unbox_symbol (obj));
-    case LISP_CONS:
-      return is_cons_unmarked (unbox_cons (obj));
     case LISP_VECT:
       return is_vector_unmarked (unbox_vector (obj));
     case LISP_LMBD:
       return is_lambda_unmarked (unbox_lambda (obj));
+    case LISP_SYMB:
+    case LISP_CONS:
+      internal_error (
+          "Shouldn't be here. Symbol and cons are gc'ed by blkalloc");
     default:
       return -1;
     }
-}
-
-static int
-is_cons_unmarked (void *ptr)
-{
-  if (!ptr)
-    return 1;
-  Lisp_Cons *l = ptr;
-  return l->gcmark == 0;
-}
-
-static int
-is_symbol_unmarked (void *ptr)
-{
-  if (!ptr)
-    return 0;
-  Lisp_Symbol *l = ptr;
-  // todo these shouldn't even be here but in protected area from gc
-  if (l == unbox_symbol (q_unbound))
-    return 0;
-  if (l == unbox_symbol (q_nil))
-    return 0;
-  if (l == unbox_symbol (q_t))
-    return 0;
-
-  return l->gcmark == 0;
 }
 
 static int
