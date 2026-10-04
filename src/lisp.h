@@ -84,18 +84,6 @@ typedef Lisp_Object (*lisp_subr_fun_8) (Lisp_Object arg1, Lisp_Object arg2,
                                         Lisp_Object arg7, Lisp_Object arg8);
 typedef Lisp_Object (*lisp_subr_fun_many) (int argc, Lisp_Object *argv);
 
-/*
-  TODO: gcmarks like that (char gcmark) are not compact in memory.
-  They screw alignment of structs, causing weird padding of all types,
-  incrementing memory usage and cpu cycles by a lot.
- */
-/*
-  TODO 2: block allocator now handles its onw gcmarks in its own
-  structures.  but var size heap still need it. this is TEMPORARY just
-  to separate work; var size heap alloc will be rewritten and every gc
-  mark here removed.
- */
-
 struct lisp_cons
 {
   Lisp_Object car;
@@ -104,7 +92,6 @@ struct lisp_cons
 
 struct lisp_string
 {
-  char gcmark;
   size_t size;
   char data[];
 };
@@ -125,7 +112,6 @@ struct lisp_symbol
 
 struct lisp_vector
 {
-  char gcmark;
   size_t size;
   // flexible array member
   Lisp_Object contents[];
@@ -159,7 +145,6 @@ struct lisp_subr
 
 struct lisp_lambda
 {
-  char gcmark;
   int minargs;
   int maxargs;
   Lisp_Object env;

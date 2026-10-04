@@ -1,3 +1,4 @@
 erlisp
 test/test_erlisp
 obj/
+tmp/
