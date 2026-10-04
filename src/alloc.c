@@ -237,19 +237,6 @@ defsubr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
   return symb;
 }
 
-void
-free_lisp_obj (Lisp_Object o)
-{
-  if (o == LISP_NULL)
-    return;
-
-  if (type_of (o) == LISP_INTG)
-    // integer is immediate, not a pointer. nothing to do
-    return;
-
-  free (unbox_pointer (o));
-}
-
 int
 gc_maybe ()
 {

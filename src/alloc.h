@@ -49,7 +49,6 @@ Lisp_Object make_lambda (int minargs, int maxargs, Lisp_Object env,
                          Lisp_Object *args, Lisp_Object form);
 Lisp_Object defsubr (const char *name, int minargs, int maxargs,
                      union lisp_subr_fun fun);
-void free_lisp_obj (Lisp_Object o);
 
 void init_alloc ();
 struct memstats gc ();

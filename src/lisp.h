@@ -12,9 +12,6 @@
 #define VALBITS (INTBITS - TAGBITS)
 #define VALMASK (~TAGMASK)
 
-// TODO misleading name: our lisp does NOT have null, it only has nil that is a
-// proper symbol. rename or delete this
-#define LISP_NULL 0
 #define MANY 999
 #define UNEVALLED 888
 
