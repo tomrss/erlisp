@@ -244,11 +244,6 @@ defsubr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 
   Lisp_Object subr = make_subr (name, minargs, maxargs, fun);
   Lisp_Object symb = make_str_symbol (name);
-  /* { */
-  /*   // TODO implement pure storage and remove this HORROR */
-  /*   unbox_symbol (symb)->gcmark = 1; */
-  /*   unbox_string (unbox_symbol (symb)->name)->gcmark = 1; */
-  /* } */
   unbox_symbol (symb)->value = subr;
   return symb;
 }
@@ -279,7 +274,7 @@ gc_maybe ()
 
   // TODO defines
   const float growthreshold = 5.;
-  const size_t minheap = PAGE_SIZE * 16;
+  const size_t minheap = PAGE_SIZE * 32;
   const size_t maxheap = 256 * 1024 * 1024;
 
   size_t used = current_used_size ();

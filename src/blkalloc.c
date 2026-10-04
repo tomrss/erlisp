@@ -5,11 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-
 static struct blkpage *
 blkpagenew (blkallocator *blka)
 {
-  int numblk = blka->blkperpage;
+  size_t numblk = blka->blkperpage;
+  size_t numwords = (numblk + WORDBITS - 1) / WORDBITS;
 
   // aligend memory is crucial for page recognition from object ptr
   struct blkpage *page = aligned_alloc (PAGE_SIZE, PAGE_SIZE);
@@ -17,16 +17,13 @@ blkpagenew (blkallocator *blka)
   page->owner = blka;
   page->numused = 0;
   page->numblk = numblk;
-  /* page->numbmapwords = numwords; */
-  /* page->allocbmap = calloc (numwords, sizeof (uint64_t)); */
-  /* page->gcmarkbmap = calloc (numwords, sizeof (uint64_t)); */
-  for (size_t i = 0; i < NUMWORDS; i++)
+  page->firstfreeword = 0;
+  page->numwords = numwords;
+  for (size_t i = 0; i < numwords; i++)
     {
       page->allocbmap[i] = 0;
       page->gcmarkbmap[i] = 0;
     }
-
-  /* memset (page->data, 0, PAGE_SIZE - sizeof (struct blkpage)); */
 
   page->next = blka->pages;
   blka->pages = page;
@@ -38,18 +35,22 @@ blkpagenew (blkallocator *blka)
 static int
 blkpagealloc (struct blkpage *page)
 {
-  for (size_t wordpos = 0; wordpos < NUMWORDS; wordpos++)
+  for (size_t i = page->firstfreeword; i < page->numwords; i++)
     {
-      if (page->allocbmap[wordpos] == UINT64_MAX)
-        continue;
-      size_t bitpos = __builtin_ctzll (~page->allocbmap[wordpos]);
-      if (wordpos * WORDBITS + bitpos >= page->numblk)
+      if (page->allocbmap[i] == UINT64_MAX)
+        {
+          page->firstfreeword++;
+          continue;
+        }
+
+      size_t bitpos = __builtin_ctzll (~page->allocbmap[i]);
+      if (i * WORDBITS + bitpos >= page->numblk)
         // bitmap outside range
         return -1;
       // set block marker bit setting it as occupied and return total offset
-      page->allocbmap[wordpos] |= (1ULL << bitpos);
+      page->allocbmap[i] |= (1ULL << bitpos);
       page->numused++;
-      return WORDBITS * wordpos + bitpos;
+      return WORDBITS * i + bitpos;
     }
 
   return -1;
@@ -73,7 +74,7 @@ static size_t
 blkpagegcsweep (struct blkpage *page)
 {
   size_t live = 0;
-  for (size_t i = 0; i < NUMWORDS; i++)
+  for (size_t i = 0; i < page->numwords; i++)
     {
       // gc sweep is just this: new bitmap of allocated blocks is the
       // previous one excluded every gc marked block
@@ -86,6 +87,7 @@ blkpagegcsweep (struct blkpage *page)
     }
 
   page->numused = live;
+  page->firstfreeword = 0;
   return live;
 }
 
@@ -94,6 +96,11 @@ blkalloc_init (size_t blksize)
 {
   if (blksize < BLKMIN)
     internal_error ("Block size minimum is %d\n", BLKMIN);
+
+  // round up to multiple of BLKALIGN for respecting memory alignment
+  blksize = blksize % BLKALIGN == 0
+                ? blksize
+                : (blksize / BLKALIGN) * BLKALIGN + BLKALIGN;
 
   // TODO why calloc instead of malloc? i don't remember and cannot find a good
   // reason right now.
@@ -105,7 +112,7 @@ blkalloc_init (size_t blksize)
     // the size of each block
     .blkperpage = (PAGE_SIZE - sizeof (struct blkpage)) / blksize,
     .pages = NULL,
-    .pagecurrent = NULL,
+    .availpages = NULL,
     .numpages = 0,
     .numused = 0,
     .gcgenerations = 0,
@@ -116,18 +123,19 @@ blkalloc_init (size_t blksize)
 void *
 blkalloc (blkallocator *blka)
 {
-  struct blkpage *page = blka->pages;
+  struct blkpage *page = blka->availpages;
   int offset = -1;
 
   // find page and page offset of the first free element
-  // TODO: probably some heuristics here would be nice!
   while (page != NULL)
     {
       offset = blkpagealloc (page);
       if (offset >= 0)
         // found free blk in page
         break;
-      page = page->next;
+      // page is full, remove it from availpages
+      blka->availpages = page->nextavail;
+      page = page->nextavail;
     }
 
   if (offset < 0)
@@ -135,6 +143,8 @@ blkalloc (blkallocator *blka)
       // no free page, get a fresh one
       page = blkpagenew (blka);
       offset = blkpagealloc (page);
+      page->nextavail = blka->availpages;
+      blka->availpages = page;
     }
 
   blka->numused++;
@@ -158,17 +168,30 @@ blkgcmark (blkallocator *blka, void *objptr)
 blkgcstats
 blkgcsweep (blkallocator *blka)
 {
+  blka->availpages = NULL; // will be rebuilt from scratch
+
   struct blkpage *page = blka->pages;
   size_t live = 0;
   while (page != NULL)
     {
-      live += blkpagegcsweep (page);
+      size_t pagelive = blkpagegcsweep (page);
+
+      if (pagelive < page->numblk)
+        {
+          // TODO some heuristics here on sorting of pages could help
+          // in containing memory fragmentation
+          page->nextavail = blka->availpages;
+          blka->availpages = page;
+        }
+      else
+        page->nextavail = NULL;
+
+      live += pagelive;
       page = page->next;
     }
 
   size_t blkfreed = blka->numused - live;
   blka->numused = live;
-  blka->pagecurrent = blka->pages;
   blka->gcgenerations++;
   return (blkgcstats){ .blkwalked = blka->numused, .blkfreed = blkfreed };
 }
