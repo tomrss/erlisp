@@ -16,8 +16,12 @@ struct heap
   blkallocator *smallstrings;
   blkallocator *smallvectors;
   blkallocator *smalllambdas;
-  
+
   loballocator *lobs;
+
+  size_t usedsize;
+  size_t lastgcused;
+  size_t gcgenerations;
 };
 
 struct memstats
@@ -52,8 +56,6 @@ void init_alloc ();
 struct memstats gc ();
 int gc_maybe ();
 struct memstats memstats ();
-size_t current_used_size ();
-size_t last_gcgen_used_size ();
 void print_memstats (struct memstats);
 void memdump ();
 

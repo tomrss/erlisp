@@ -41,10 +41,21 @@ is_small_lambda (int maxargs)
 
 struct heap *heap;
 
-static struct memstats lastgcstats;
-static unsigned long gcgen;
-
 static size_t sum_used_size (struct memstats);
+
+static inline void *
+heapblkalloc (blkallocator *blka)
+{
+  heap->usedsize += blka->blksize;
+  return blkalloc (blka);
+}
+
+static inline void *
+heaploballoc (size_t size)
+{
+  heap->usedsize += size;
+  return loballoc (heap->lobs, size);
+}
 
 static void gcmarkobj (Lisp_Object obj);
 static void gcmark ();
@@ -68,14 +79,15 @@ init_alloc ()
   // large variable-sized objects will go here
   heap->lobs = loballoc_init ();
 
-  lastgcstats = (struct memstats){};
-  gcgen = 0;
+  heap->usedsize = 0;
+  heap->lastgcused = 0;
+  heap->gcgenerations = 0;
 }
 
 Lisp_Object
 make_cons (Lisp_Object car, Lisp_Object cdr)
 {
-  Lisp_Cons *cons = blkalloc (heap->conses);
+  Lisp_Cons *cons = heapblkalloc (heap->conses);
 
   cons->car = car;
   cons->cdr = cdr;
@@ -90,13 +102,13 @@ make_vector (size_t size)
   if (is_small_vector (size))
     {
       // allocate as fixed size holding SMALL_VECT_SIZE elements
-      vec = blkalloc (heap->smallvectors);
+      vec = heapblkalloc (heap->smallvectors);
     }
   else
     {
       // allocate in large object heap
       size_t allocsize = sizeof (Lisp_Vector) + size * sizeof (Lisp_Object);
-      vec = loballoc (heap->lobs, allocsize);
+      vec = heaploballoc (allocsize);
     }
 
   vec->size = size;
@@ -130,13 +142,13 @@ make_uninit_string (size_t size)
   if (is_small_string (size))
     {
       // allocate as fixed sized (with some padding)
-      string = blkalloc (heap->smallstrings);
+      string = heapblkalloc (heap->smallstrings);
     }
   else
     {
       // allocate in large object heap (+1 for terminator)
       size_t allocsize = sizeof (Lisp_String) + (size + 1) * sizeof (char);
-      string = loballoc (heap->lobs, allocsize);
+      string = heaploballoc (allocsize);
     }
 
   string->size = size;
@@ -149,7 +161,7 @@ make_uninit_string (size_t size)
 Lisp_Object
 make_symbol (Lisp_Object name)
 {
-  Lisp_Symbol *symbol = blkalloc (heap->symbols);
+  Lisp_Symbol *symbol = heapblkalloc (heap->symbols);
 
   symbol->name = name;
   symbol->value = q_unbound;
@@ -194,13 +206,13 @@ make_lambda (int minargs, int maxargs, Lisp_Object env, Lisp_Object *args,
   // TODO maybe use a lisp list args instead of c array?
   if (is_small_lambda (maxargs))
     {
-      lambda = blkalloc (heap->smalllambdas);
+      lambda = heapblkalloc (heap->smalllambdas);
     }
   else
     {
       // allocate in large object heap
       size_t allocsize = sizeof (Lisp_Lambda) + maxargs * sizeof (Lisp_Object);
-      lambda = loballoc (heap->lobs, allocsize);
+      lambda = heaploballoc (allocsize);
     }
 
   lambda->minargs = minargs;
@@ -238,31 +250,22 @@ free_lisp_obj (Lisp_Object o)
   free (unbox_pointer (o));
 }
 
-static int gcwait = 0;
-
 int
 gc_maybe ()
 {
-  // TODO ugly!!  remove this and use a counter on the blkalloc
-  // this just to sample once in 20 instead of every time recalculating stats!
-  if (gcwait++ < 20)
-    return 0;
-  gcwait = 0;
-
   // TODO defines
   const float growthreshold = 5.;
   const size_t minheap = PAGE_SIZE * 32;
   const size_t maxheap = 256 * 1024 * 1024;
 
-  size_t used = current_used_size ();
+  size_t used = heap->usedsize;
   if (used > maxheap)
     {
       gc ();
       return 1;
     }
 
-  size_t lastused = last_gcgen_used_size ();
-  if (used > minheap && used > lastused * (1 + growthreshold))
+  if (used > minheap && used > heap->lastgcused * (1 + growthreshold))
     {
       gc ();
       return 1;
@@ -276,18 +279,16 @@ gc ()
 {
   gcmark ();
   struct memstats stats = gcsweep ();
-  gcgen++;
-  lastgcstats = stats;
+  heap->gcgenerations++;
+  // resync the counter with the real usage after sweep
+  heap->usedsize = sum_used_size (stats);
+  heap->lastgcused = heap->usedsize;
   return stats;
 }
 
 static void
 gcmarkobj (Lisp_Object obj)
 {
-  // TODO this marks ALL. awful. use three-color approach:
-  //  black -> collect
-  //  grey  -> working list
-  //  white -> untouchable
   switch (type_of (obj))
     {
     case LISP_STRG:
@@ -382,7 +383,6 @@ static struct memstats
 gcsweep ()
 {
   // sweep fixed blk memory
-  // TODO: let blkallocator take care of it by itself??
   blkgcsweep (heap->conses);
   blkgcsweep (heap->symbols);
   blkgcsweep (heap->smallstrings);
@@ -414,19 +414,7 @@ sum_used_size (struct memstats stats)
 {
   return stats.conses.sizeused + stats.symbols.sizeused
          + stats.smallstrings.sizeused + stats.smallvectors.sizeused
-         + stats.smalllambdas.sizeused + heap->lobs->size;
-}
-
-size_t
-current_used_size ()
-{
-  return sum_used_size (memstats ());
-}
-
-size_t
-last_gcgen_used_size ()
-{
-  return sum_used_size (lastgcstats);
+         + stats.smalllambdas.sizeused + stats.lobsize;
 }
 
 static void
@@ -440,15 +428,8 @@ print_blkmemstats (const char *name, blkmemstats st)
 void
 print_memstats (struct memstats stats)
 {
-  // TODO
   printf ("Fixed memory blocks:\n");
   size_t freesize = 0;
-  /* struct blk *blk = heap->conses->freelist; */
-  /* while (blk) */
-  /*   { */
-  /*     freesize++; */
-  /*     blk = blk->next; */
-  /*   } */
   printf ("real cons freelist size: %zu\n", freesize);
   print_blkmemstats ("conses", stats.conses);
   print_blkmemstats ("symbols", stats.symbols);

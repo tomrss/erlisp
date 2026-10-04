@@ -115,7 +115,6 @@ blkalloc_init (size_t blksize)
     .availpages = NULL,
     .numpages = 0,
     .numused = 0,
-    .gcgenerations = 0,
   };
   return blka;
 }
@@ -192,7 +191,6 @@ blkgcsweep (blkallocator *blka)
 
   size_t blkfreed = blka->numused - live;
   blka->numused = live;
-  blka->gcgenerations++;
   return (blkgcstats){ .blkwalked = blka->numused, .blkfreed = blkfreed };
 }
 
@@ -210,6 +208,5 @@ blkstats (blkallocator *blka)
     .sizepages = blka->numpages * PAGE_SIZE,
     .numused = blka->numused,
     .sizeused = blka->numused * blka->blksize,
-    .gcgenerations = blka->gcgenerations,
   };
 }

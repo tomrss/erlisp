@@ -44,7 +44,6 @@ struct blkallocator
   size_t numpages;                  // number of allocated blck pages
   size_t numused;                   // number of used elements
   int (*blk_free_pred) (void *ptr); // tells when a blk can be freed
-  unsigned int gcgenerations;       // count of gc runs
 };
 
 struct blkgcstats
@@ -59,7 +58,6 @@ struct blkmemstats
   size_t sizepages;           // bytes allocated in block pages
   unsigned long int numused;  // number of used elements
   size_t sizeused;            // size of used elements in bytes
-  unsigned int gcgenerations; // count of gc runs
 };
 
 blkallocator *blkalloc_init (size_t blksize);
