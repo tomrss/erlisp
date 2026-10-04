@@ -7,26 +7,28 @@
 // TODO BLKALIGN and this should be one define probably in lisp.h
 #define LOBBLKALIGN 8
 
+typedef struct loballocator loballocator;
+
 struct lobblk
 {
-  struct lobheap *owner;
+  struct loballocator *owner;
   struct lobblk *next;
   size_t allocsize;
   char gcmark;
   alignas (LOBBLKALIGN) char data[];
 };
 
-struct lobheap
+struct loballocator
 {
-  size_t heapsize;
+  size_t size;
   size_t numblk;
   struct lobblk *lobblks;
 };
 
-struct lobheap *lobheap_init ();
-void *loballoc (struct lobheap *heap, size_t size);
-int lobgcmark (struct lobheap *heap, void *objptr);
-void lobgcsweep (struct lobheap *heap);
-void lobmemdump (struct lobheap *heap);
+struct loballocator *loballoc_init ();
+void *loballoc (struct loballocator *loba, size_t size);
+int lobgcmark (struct loballocator *loba, void *objptr);
+void lobgcsweep (struct loballocator *loba);
+void lobmemdump (struct loballocator *loba);
 
 #endif /* LOBALLOC_H */

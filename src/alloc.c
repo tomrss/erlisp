@@ -39,13 +39,7 @@ is_small_lambda (int maxargs)
   return maxargs <= SMALL_LMBD_NARGS;
 }
 
-blkallocator *all_cons;
-blkallocator *all_symbol;
-blkallocator *all_smallstring;
-blkallocator *all_smallvector;
-blkallocator *all_smalllambda;
-
-struct lobheap *lobheap;
+struct heap *heap;
 
 static struct memstats lastgcstats;
 static unsigned long gcgen;
@@ -54,23 +48,25 @@ static size_t sum_used_size (struct memstats);
 
 static void gcmarkobj (Lisp_Object obj);
 static void gcmark ();
+
 static struct memstats gcsweep ();
 
 void
 init_alloc ()
 {
   // fixed-sized types: block size is the size of struct
-  all_cons = blkalloc_init (sizeof (Lisp_Cons));
-  all_symbol = blkalloc_init (sizeof (Lisp_Symbol));
+  heap = malloc (sizeof (struct heap));
+  heap->conses = blkalloc_init (sizeof (Lisp_Cons));
+  heap->symbols = blkalloc_init (sizeof (Lisp_Symbol));
   // variable-sized types: small objects will be padded in blocks of
   // fixed size. the block size is the size of a flexible array with N
   // elements
-  all_smallstring = blkalloc_init (SMALL_STRG_SIZE);
-  all_smallvector = blkalloc_init (SMALL_VECT_SIZE);
-  all_smalllambda = blkalloc_init (SMALL_LMBD_SIZE);
+  heap->smallstrings = blkalloc_init (SMALL_STRG_SIZE);
+  heap->smallvectors = blkalloc_init (SMALL_VECT_SIZE);
+  heap->smalllambdas = blkalloc_init (SMALL_LMBD_SIZE);
 
   // large variable-sized objects will go here
-  lobheap = lobheap_init ();
+  heap->lobs = loballoc_init ();
 
   lastgcstats = (struct memstats){};
   gcgen = 0;
@@ -79,7 +75,7 @@ init_alloc ()
 Lisp_Object
 make_cons (Lisp_Object car, Lisp_Object cdr)
 {
-  Lisp_Cons *cons = blkalloc (all_cons);
+  Lisp_Cons *cons = blkalloc (heap->conses);
 
   cons->car = car;
   cons->cdr = cdr;
@@ -94,13 +90,13 @@ make_vector (size_t size)
   if (is_small_vector (size))
     {
       // allocate as fixed size holding SMALL_VECT_SIZE elements
-      vec = blkalloc (all_smallvector);
+      vec = blkalloc (heap->smallvectors);
     }
   else
     {
       // allocate in large object heap
       size_t allocsize = sizeof (Lisp_Vector) + size * sizeof (Lisp_Object);
-      vec = loballoc (lobheap, allocsize);
+      vec = loballoc (heap->lobs, allocsize);
     }
 
   vec->size = size;
@@ -134,13 +130,13 @@ make_uninit_string (size_t size)
   if (is_small_string (size))
     {
       // allocate as fixed sized (with some padding)
-      string = blkalloc (all_smallstring);
+      string = blkalloc (heap->smallstrings);
     }
   else
     {
       // allocate in large object heap (+1 for terminator)
       size_t allocsize = sizeof (Lisp_String) + (size + 1) * sizeof (char);
-      string = loballoc (lobheap, allocsize);
+      string = loballoc (heap->lobs, allocsize);
     }
 
   string->size = size;
@@ -153,7 +149,7 @@ make_uninit_string (size_t size)
 Lisp_Object
 make_symbol (Lisp_Object name)
 {
-  Lisp_Symbol *symbol = blkalloc (all_symbol);
+  Lisp_Symbol *symbol = blkalloc (heap->symbols);
 
   symbol->name = name;
   symbol->value = q_unbound;
@@ -198,13 +194,13 @@ make_lambda (int minargs, int maxargs, Lisp_Object env, Lisp_Object *args,
   // TODO maybe use a lisp list args instead of c array?
   if (is_small_lambda (maxargs))
     {
-      lambda = blkalloc (all_smalllambda);
+      lambda = blkalloc (heap->smalllambdas);
     }
   else
     {
       // allocate in large object heap
       size_t allocsize = sizeof (Lisp_Lambda) + maxargs * sizeof (Lisp_Object);
-      lambda = loballoc (lobheap, allocsize);
+      lambda = loballoc (heap->lobs, allocsize);
     }
 
   lambda->minargs = minargs;
@@ -296,12 +292,12 @@ gcmarkobj (Lisp_Object obj)
     {
     case LISP_STRG:
       if (is_small_string (unbox_string (obj)->size))
-        blkgcmark (all_smallstring, unbox_string (obj));
+        blkgcmark (heap->smallstrings, unbox_string (obj));
       else
-        lobgcmark (lobheap, unbox_string (obj));
+        lobgcmark (heap->lobs, unbox_string (obj));
       break;
     case LISP_SYMB:
-      if (!blkgcmark (all_symbol, unbox_symbol (obj)))
+      if (!blkgcmark (heap->symbols, unbox_symbol (obj)))
         break;
       gcmarkobj (unbox_symbol (obj)->name);
       gcmarkobj (unbox_symbol (obj)->value);
@@ -309,12 +305,12 @@ gcmarkobj (Lisp_Object obj)
     case LISP_LMBD:
       if (is_small_lambda (unbox_lambda (obj)->maxargs))
         {
-          if (!blkgcmark (all_smalllambda, unbox_lambda (obj)))
+          if (!blkgcmark (heap->smalllambdas, unbox_lambda (obj)))
             break;
         }
       else
         {
-          if (!lobgcmark (lobheap, unbox_lambda (obj)))
+          if (!lobgcmark (heap->lobs, unbox_lambda (obj)))
             break;
         }
       gcmarkobj (unbox_lambda (obj)->form);
@@ -323,7 +319,7 @@ gcmarkobj (Lisp_Object obj)
         gcmarkobj (unbox_lambda (obj)->args[i]);
       break;
     case LISP_CONS:
-      if (!blkgcmark (all_cons, unbox_cons (obj)))
+      if (!blkgcmark (heap->conses, unbox_cons (obj)))
         break;
       gcmarkobj (f_car (obj));
       // FIXME in case of a long list, this recursion could be FATAL.
@@ -333,12 +329,12 @@ gcmarkobj (Lisp_Object obj)
     case LISP_VECT:
       if (is_small_vector (unbox_vector (obj)->size))
         {
-          if (!blkgcmark (all_smallvector, unbox_vector (obj)))
+          if (!blkgcmark (heap->smallvectors, unbox_vector (obj)))
             break;
         }
       else
         {
-          if (!lobgcmark (lobheap, unbox_vector (obj)))
+          if (!lobgcmark (heap->lobs, unbox_vector (obj)))
             break;
         }
       for (size_t i = 0; i < unbox_vector (obj)->size; i++)
@@ -387,14 +383,14 @@ gcsweep ()
 {
   // sweep fixed blk memory
   // TODO: let blkallocator take care of it by itself??
-  blkgcsweep (all_cons);
-  blkgcsweep (all_symbol);
-  blkgcsweep (all_smallstring);
-  blkgcsweep (all_smallvector);
-  blkgcsweep (all_smalllambda);
+  blkgcsweep (heap->conses);
+  blkgcsweep (heap->symbols);
+  blkgcsweep (heap->smallstrings);
+  blkgcsweep (heap->smallvectors);
+  blkgcsweep (heap->smalllambdas);
 
   // sweep large object heap
-  lobgcsweep (lobheap);
+  lobgcsweep (heap->lobs);
 
   return memstats ();
 }
@@ -403,13 +399,13 @@ struct memstats
 memstats ()
 {
   return (struct memstats){
-    .conses = blkstats (all_cons),
-    .symbols = blkstats (all_symbol),
-    .smallstrings = blkstats (all_smallstring),
-    .smallvectors = blkstats (all_smallvector),
-    .smalllambdas = blkstats (all_smalllambda),
-    .loblength = lobheap->numblk,
-    .lobsize = lobheap->heapsize,
+    .conses = blkstats (heap->conses),
+    .symbols = blkstats (heap->symbols),
+    .smallstrings = blkstats (heap->smallstrings),
+    .smallvectors = blkstats (heap->smallvectors),
+    .smalllambdas = blkstats (heap->smalllambdas),
+    .loblength = heap->lobs->numblk,
+    .lobsize = heap->lobs->size,
   };
 }
 
@@ -418,7 +414,7 @@ sum_used_size (struct memstats stats)
 {
   return stats.conses.sizeused + stats.symbols.sizeused
          + stats.smallstrings.sizeused + stats.smallvectors.sizeused
-         + stats.smalllambdas.sizeused + lobheap->heapsize;
+         + stats.smalllambdas.sizeused + heap->lobs->size;
 }
 
 size_t
@@ -447,7 +443,7 @@ print_memstats (struct memstats stats)
   // TODO
   printf ("Fixed memory blocks:\n");
   size_t freesize = 0;
-  /* struct blk *blk = all_cons->freelist; */
+  /* struct blk *blk = heap->conses->freelist; */
   /* while (blk) */
   /*   { */
   /*     freesize++; */
@@ -468,16 +464,16 @@ void
 memdump ()
 {
   printf ("CONS BLOCKS:\n");
-  blkmemdump (all_cons);
+  blkmemdump (heap->conses);
   printf ("SYMBOL BLOCKS:\n");
-  blkmemdump (all_symbol);
+  blkmemdump (heap->symbols);
   printf ("SMALL STRING BLOCKS:\n");
-  blkmemdump (all_smallstring);
+  blkmemdump (heap->smallstrings);
   printf ("SMALL VECTOR BLOCKS:\n");
-  blkmemdump (all_smallvector);
+  blkmemdump (heap->smallvectors);
   printf ("SMALL LAMBDA BLOCKS:\n");
-  blkmemdump (all_smalllambda);
+  blkmemdump (heap->smalllambdas);
 
   printf ("VAR SIZE HEAP:\n");
-  lobmemdump (lobheap);
+  lobmemdump (heap->lobs);
 }

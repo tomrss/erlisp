@@ -4,37 +4,37 @@
 #include <stddef.h>
 #include <stdlib.h>
 
-struct lobheap *
-lobheap_init ()
+struct loballocator *
+loballoc_init ()
 {
-  struct lobheap *heap = malloc (sizeof (struct lobheap));
-  heap->heapsize = 0;
-  heap->numblk = 0;
-  heap->lobblks = NULL;
-  return heap;
+  struct loballocator *loba = malloc (sizeof (struct loballocator));
+  loba->size = 0;
+  loba->numblk = 0;
+  loba->lobblks = NULL;
+  return loba;
 }
 
 void *
-loballoc (struct lobheap *heap, size_t size)
+loballoc (struct loballocator *loba, size_t size)
 {
   struct lobblk *blk = malloc (sizeof (struct lobblk) + size);
-  blk->owner = heap;
+  blk->owner = loba;
   blk->allocsize = size;
   blk->gcmark = 0;
-  blk->next = heap->lobblks;
+  blk->next = loba->lobblks;
 
-  heap->heapsize += size;
-  heap->numblk++;
-  heap->lobblks = blk;
+  loba->size += size;
+  loba->numblk++;
+  loba->lobblks = blk;
   return blk->data;
 }
 
 int
-lobgcmark (struct lobheap *heap, void *objptr)
+lobgcmark (struct loballocator *loba, void *objptr)
 {
   struct lobblk *blk
       = (struct lobblk *)((char *)objptr - offsetof (struct lobblk, data));
-  if (blk->owner != heap)
+  if (blk->owner != loba)
     internal_error ("Object not owned by loballoc at address %p\n", objptr);
     
   if (blk->gcmark)
@@ -44,9 +44,9 @@ lobgcmark (struct lobheap *heap, void *objptr)
 }
 
 void
-lobgcsweep (struct lobheap *heap)
+lobgcsweep (struct loballocator *loba)
 {
-  struct lobblk *blk = heap->lobblks;
+  struct lobblk *blk = loba->lobblks;
   struct lobblk *prev = NULL;
   while (blk != NULL)
     {
@@ -57,13 +57,13 @@ lobgcsweep (struct lobheap *heap)
           blk = blk->next;
           continue;
         }
-      heap->heapsize -= blk->allocsize;
-      heap->numblk--;
+      loba->size -= blk->allocsize;
+      loba->numblk--;
       
       struct lobblk *blktofree = blk;
       blk = blk->next;
       if (prev == NULL)
-        heap->lobblks = blk;
+        loba->lobblks = blk;
       else
         prev->next = blk;
       free (blktofree);
@@ -71,7 +71,7 @@ lobgcsweep (struct lobheap *heap)
 }
 
 void
-lobmemdump (UNUSED struct lobheap *heap)
+lobmemdump (UNUSED struct loballocator *loba)
 {
   // TODO
 }

@@ -1,12 +1,24 @@
 #ifndef ALLOC_H
 #define ALLOC_H
 
-#include "blkalloc.h" // TODO it is ugly to import here the underlying implementation
+#include "blkalloc.h"
+#include "loballoc.h"
 #include "lisp.h"
 #include <stddef.h>
 
 #define DEFSUBR(name, minargs, maxargs, fun)                                  \
   defsubr (name, minargs, maxargs, NSUBR (maxargs, fun))
+
+struct heap
+{
+  blkallocator *conses;
+  blkallocator *symbols;
+  blkallocator *smallstrings;
+  blkallocator *smallvectors;
+  blkallocator *smalllambdas;
+  
+  loballocator *lobs;
+};
 
 struct memstats
 {
