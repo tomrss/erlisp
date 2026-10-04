@@ -2,9 +2,9 @@
 #include "blkalloc.h"
 #include "error.h"
 #include "lisp.h"
+#include "loballoc.h"
 #include "print.h"
 #include "stack.h"
-#include "vsizealloc.h"
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,7 +45,7 @@ blkallocator *all_smallstring;
 blkallocator *all_smallvector;
 blkallocator *all_smalllambda;
 
-struct vsizeheap *varsizeheap;
+struct lobheap *lobheap;
 
 static struct memstats lastgcstats;
 static unsigned long gcgen;
@@ -69,8 +69,8 @@ init_alloc ()
   all_smallvector = blkalloc_init (SMALL_VECT_SIZE);
   all_smalllambda = blkalloc_init (SMALL_LMBD_SIZE);
 
-  // large variable-sized elements will go here
-  varsizeheap = vsizeheap_init ();
+  // large variable-sized objects will go here
+  lobheap = lobheap_init ();
 
   lastgcstats = (struct memstats){};
   gcgen = 0;
@@ -98,9 +98,9 @@ make_vector (size_t size)
     }
   else
     {
-      // allocate in variable sized heap
+      // allocate in large object heap
       size_t allocsize = sizeof (Lisp_Vector) + size * sizeof (Lisp_Object);
-      vec = vsizealloc (varsizeheap, allocsize);
+      vec = loballoc (lobheap, allocsize);
     }
 
   vec->size = size;
@@ -138,9 +138,9 @@ make_uninit_string (size_t size)
     }
   else
     {
-      // allocate in variable sized heap (+1 for terminator)
+      // allocate in large object heap (+1 for terminator)
       size_t allocsize = sizeof (Lisp_String) + (size + 1) * sizeof (char);
-      string = vsizealloc (varsizeheap, allocsize);
+      string = loballoc (lobheap, allocsize);
     }
 
   string->size = size;
@@ -202,9 +202,9 @@ make_lambda (int minargs, int maxargs, Lisp_Object env, Lisp_Object *args,
     }
   else
     {
-      // allocate in variable sized heap
+      // allocate in large object heap
       size_t allocsize = sizeof (Lisp_Lambda) + maxargs * sizeof (Lisp_Object);
-      lambda = vsizealloc (varsizeheap, allocsize);
+      lambda = loballoc (lobheap, allocsize);
     }
 
   lambda->minargs = minargs;
@@ -298,7 +298,7 @@ gcmarkobj (Lisp_Object obj)
       if (is_small_string (unbox_string (obj)->size))
         blkgcmark (all_smallstring, unbox_string (obj));
       else
-        vsizegcmark (varsizeheap, unbox_string (obj));
+        lobgcmark (lobheap, unbox_string (obj));
       break;
     case LISP_SYMB:
       if (!blkgcmark (all_symbol, unbox_symbol (obj)))
@@ -314,7 +314,7 @@ gcmarkobj (Lisp_Object obj)
         }
       else
         {
-          if (!vsizegcmark (varsizeheap, unbox_lambda (obj)))
+          if (!lobgcmark (lobheap, unbox_lambda (obj)))
             break;
         }
       gcmarkobj (unbox_lambda (obj)->form);
@@ -338,7 +338,7 @@ gcmarkobj (Lisp_Object obj)
         }
       else
         {
-          if (!vsizegcmark (varsizeheap, unbox_vector (obj)))
+          if (!lobgcmark (lobheap, unbox_vector (obj)))
             break;
         }
       for (size_t i = 0; i < unbox_vector (obj)->size; i++)
@@ -393,8 +393,8 @@ gcsweep ()
   blkgcsweep (all_smallvector);
   blkgcsweep (all_smalllambda);
 
-  // sweep variable sized heap
-  vsizegcsweep (varsizeheap);
+  // sweep large object heap
+  lobgcsweep (lobheap);
 
   return memstats ();
 }
@@ -408,8 +408,8 @@ memstats ()
     .smallstrings = blkstats (all_smallstring),
     .smallvectors = blkstats (all_smallvector),
     .smalllambdas = blkstats (all_smalllambda),
-    .varsizeheaplength = varsizeheap->numblk,
-    .varsizeheapsize = varsizeheap->heapsize,
+    .loblength = lobheap->numblk,
+    .lobsize = lobheap->heapsize,
   };
 }
 
@@ -418,7 +418,7 @@ sum_used_size (struct memstats stats)
 {
   return stats.conses.sizeused + stats.symbols.sizeused
          + stats.smallstrings.sizeused + stats.smallvectors.sizeused
-         + stats.smalllambdas.sizeused + varsizeheap->heapsize;
+         + stats.smalllambdas.sizeused + lobheap->heapsize;
 }
 
 size_t
@@ -459,9 +459,9 @@ print_memstats (struct memstats stats)
   print_blkmemstats ("small strings", stats.smallstrings);
   print_blkmemstats ("small vectors", stats.smallvectors);
   print_blkmemstats ("small lambda", stats.smalllambdas);
-  printf ("Variable sized heap:\n");
-  printf (" %lu objects (%zu B)\n", stats.varsizeheaplength,
-          stats.varsizeheapsize);
+  printf ("Large object heap:\n");
+  printf (" %lu objects (%zu B)\n", stats.loblength,
+          stats.lobsize);
 }
 
 void
@@ -479,5 +479,5 @@ memdump ()
   blkmemdump (all_smalllambda);
 
   printf ("VAR SIZE HEAP:\n");
-  vsizememdump (varsizeheap);
+  lobmemdump (lobheap);
 }

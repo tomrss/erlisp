@@ -16,8 +16,8 @@ struct memstats
   blkmemstats smallstrings;
   blkmemstats smallvectors;
   blkmemstats smalllambdas;
-  unsigned long int varsizeheaplength;
-  size_t varsizeheapsize;
+  unsigned long int loblength;
+  size_t lobsize;
 };
 
 Lisp_Object make_string (const char *s);
