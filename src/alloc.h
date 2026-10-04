@@ -26,13 +26,12 @@ struct heap
 
 struct memstats
 {
-  // TODO using blkmemstats is handy but depends on underlying impl
   blkmemstats conses;
   blkmemstats symbols;
   blkmemstats smallstrings;
   blkmemstats smallvectors;
   blkmemstats smalllambdas;
-  unsigned long int loblength;
+  size_t loblength;
   size_t lobsize;
 };
 
