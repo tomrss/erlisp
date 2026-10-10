@@ -105,6 +105,7 @@ static TestResult test_builtins_define_child_snapshot ();
 static TestResult test_builtins_define_global ();
 static TestResult test_builtins_load_global ();
 static TestResult test_builtins_load_error ();
+static TestResult test_builtins_read ();
 
 static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "car cdr", .run = test_builtins_car_cdr },
@@ -149,6 +150,7 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "def global", .run = test_builtins_define_global },
   { .skip = 0, .name = "load global", .run = test_builtins_load_global },
   { .skip = 0, .name = "load error", .run = test_builtins_load_error },
+  { .skip = 0, .name = "read", .run = test_builtins_read },
   {}, // terminator
 };
 
@@ -670,5 +672,18 @@ test_builtins_load_error ()
                 f_intern (make_string ("load-test-error")));
   EXPECT_INT ("load-error-c", 1);
   EXPECT_ERROR ("load-error-d", q_error_unbound);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_read ()
+{
+  EXPECT_INT ("(read \"42\")", 42);
+  EXPECT_FORM ("(read \"(a (b . c) 1)\")", "(a (b . c) 1)");
+  EXPECT_INT ("(eval (read \"(+ 1 2)\"))", 3);
+  // syntax errors are signaled, not fatal
+  EXPECT_ERROR ("(read \"(1 2\")", q_error_syntax);
+  EXPECT_ERROR ("(read \")\")", q_error_syntax);
+  EXPECT_ERROR ("(read 1)", q_error_type);
   return TEST_RESULT_SUCCESS;
 }

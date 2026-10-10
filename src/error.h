@@ -88,6 +88,14 @@ invalidfunc_error (Lisp_Object invalidfunc)
   f_signal (q_error_invalidfunc, f_cons (invalidfunc, q_nil));
 }
 
+NORETURN static inline void
+syntax_error (const char *msg, int line)
+{
+  Lisp_Object data = f_cons (box_int (line), q_nil);
+  data = f_cons (make_string (msg), data);
+  f_signal (q_error_syntax, data);
+}
+
 static inline void
 check_type (Lisp_Object obj, Lisp_Type type)
 {

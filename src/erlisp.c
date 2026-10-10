@@ -2,15 +2,19 @@
 #include "print.h"
 #include "env.h"
 #include "eval.h"
-#include "lexer.h"
 #include "lisp.h"
-#include "parser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef HAVE_READLINE
 #include <readline/history.h>
 #include <readline/readline.h>
 #endif /* HAVE_READLINE */
+
+static Lisp_Object
+read_eval (Lisp_Object line)
+{
+  return eval (env_current (), f_read (line));
+}
 
 int
 main (int argc, char **argv)
@@ -23,8 +27,6 @@ main (int argc, char **argv)
       // repl
       printf ("ErLisp v0.1.0\n");
 
-      Lexer *l;
-      Lisp_Object prog;
       Lisp_Object res;
       char *line = NULL;
       ssize_t lenline;
@@ -61,10 +63,7 @@ main (int argc, char **argv)
               free (line);
               break;
             }
-          l = lex_init (stream_string (line, lenline));
-
-          prog = parse_sexp (l);
-          if (safe_eval (env_current (), prog, &res))
+          if (condition_case_1 (read_eval, make_string (line), &res))
             {
               print_form (res);
               printf ("\n");
@@ -76,7 +75,6 @@ main (int argc, char **argv)
 
           gc ();
 
-          lex_close (l);
           linum++;
         }
 

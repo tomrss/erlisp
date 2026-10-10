@@ -22,6 +22,7 @@ Lisp_Object q_error_funcargs;
 Lisp_Object q_error_invalidfunc;
 Lisp_Object q_error_maxhandlerdepth;
 Lisp_Object q_error_stackoverflow;
+Lisp_Object q_error_syntax;
 Lisp_Object q_error_type;
 Lisp_Object q_error_unbound;
 Lisp_Object q_error_unimplemented;
@@ -637,6 +638,22 @@ f_load (Lisp_Object path)
   return q_t;
 }
 
+Lisp_Object
+f_read (Lisp_Object string)
+{
+  check_type (string, LISP_STRG);
+
+  Lisp_String *ustring = unbox_string (string);
+  Lexer *l = lex_init (stream_string (ustring->data, ustring->size));
+
+  // TODO lexer leaks on syntax error, needs unwind-protect
+  Lisp_Object form = parse_sexp (l);
+
+  lex_close (l);
+
+  return form;
+}
+
 NORETURN Lisp_Object
 f_signal (Lisp_Object symbol, Lisp_Object data)
 {
@@ -721,6 +738,7 @@ init_builtins ()
   q_error_invalidfunc = make_str_symbol ("invalid-func-error");
   q_error_maxhandlerdepth = make_str_symbol ("max-handler-depth-error");
   q_error_stackoverflow = make_str_symbol ("stack-overflow-error");
+  q_error_syntax = make_str_symbol ("syntax-error");
   q_error_type = make_str_symbol ("type-error");
   q_error_unbound = make_str_symbol ("unbound-error");
   q_error_unimplemented = make_str_symbol ("unimplemented-error");
@@ -746,6 +764,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, q_error_invalidfunc);
   obarray_put (o, q_error_maxhandlerdepth);
   obarray_put (o, q_error_stackoverflow);
+  obarray_put (o, q_error_syntax);
   obarray_put (o, q_error_type);
   obarray_put (o, q_error_unbound);
   obarray_put (o, q_error_unimplemented);
@@ -796,6 +815,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
   obarray_put (o, DEFSUBR ("format", 2, MANY, f_format));
   obarray_put (o, DEFSUBR ("load", 1, 1, f_load));
+  obarray_put (o, DEFSUBR ("read", 1, 1, f_read));
   obarray_put (o, DEFSUBR ("signal", 1, 2, f_signal));
   obarray_put (o, DEFSUBR ("error-symbol", 1, 1, f_error_symbol));
   obarray_put (o, DEFSUBR ("error-backtrace", 1, 1, f_error_backtrace));

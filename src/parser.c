@@ -1,5 +1,6 @@
 #include "parser.h"
 #include "alloc.h"
+#include "error.h"
 #include "lexer.h"
 #include "lisp.h"
 #include "obarray.h"
@@ -11,10 +12,8 @@ static Lisp_Object parse_sexp_from_tok (Lexer *l, Token tok);
 static void
 parser_error (const char *msg, const Token *tok)
 {
-  fprintf (stderr, "Parse error at line %d: %s (token type %s)\n",
-           tok ? tok->line : -1, msg,
-           tok ? lex_token_type (tok->type) : "<none>");
-  exit (1);
+  int line = tok ? tok->line : -1;
+  syntax_error (msg, line);
 }
 
 static Lisp_Object
