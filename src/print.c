@@ -1,7 +1,71 @@
 #include "print.h"
 #include "lisp.h"
+#include <math.h>
 
 // TODO very ugly, pls print to string not to stdout
+
+static void
+fprint_float (FILE *stream, Lisp_Float f)
+{
+  if (isnan (f))
+    {
+      fprintf (stream, "+nan.0");
+      return;
+    }
+  if (isinf (f))
+    {
+      fprintf (stream, f > 0 ? "+inf.0" : "-inf.0");
+      return;
+    }
+
+  // shortest representation that reads back to the same value: 17
+  // significant digits are always enough for a double
+  char buf[32];
+  for (int prec = 1; prec <= 17; prec++)
+    {
+      snprintf (buf, sizeof buf, "%.*g", prec, (double)f);
+      if ((Lisp_Float)strtod (buf, NULL) == f)
+        break;
+    }
+
+  // always look like a float, so that 1.0 is not printed as 1
+  if (!strpbrk (buf, ".e"))
+    strcat (buf, ".0");
+
+  fprintf (stream, "%s", buf);
+}
+
+// mirror of parse_char in lexer.c, so that a printed char reads back
+static void
+fprint_char (FILE *stream, Lisp_Char c)
+{
+  switch (c)
+    {
+    case '\n':
+      fprintf (stream, "?\\n");
+      break;
+    case '\t':
+      fprintf (stream, "?\\t");
+      break;
+    case '\r':
+      fprintf (stream, "?\\r");
+      break;
+    case ' ':
+      fprintf (stream, "?\\s");
+      break;
+    case 27:
+      fprintf (stream, "?\\e");
+      break;
+    case '\0':
+      fprintf (stream, "?\\0");
+      break;
+    case '\\':
+      fprintf (stream, "?\\\\");
+      break;
+    default:
+      fprintf (stream, "?%c", c);
+    }
+}
 
 void
 print_form (Lisp_Object form)
@@ -59,6 +123,12 @@ fprint_form (FILE *stream, Lisp_Object form)
       fprintf (stream, " . ");
       fprint_form (stream, unbox_cons (form)->cdr);
       fprintf (stream, ")");
+      break;
+    case LISP_FLOT:
+      fprint_float (stream, unbox_float (form));
+      break;
+    case LISP_CHAR:
+      fprint_char (stream, unbox_char (form));
       break;
     }
 }

@@ -170,6 +170,8 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
   switch (type)
     {
     case LISP_INTG:
+    case LISP_CHAR:
+    case LISP_FLOT:
       // immediates can be directly compared, but should already be
       // handled at beginning of function
       return x == y ? q_t : q_nil;

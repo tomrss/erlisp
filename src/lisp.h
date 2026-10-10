@@ -11,6 +11,12 @@
 #define TAGMASK ((1LL << TAGBITS) - 1)
 #define VALBITS (INTBITS - TAGBITS)
 #define VALMASK (~TAGMASK)
+#define IMMDSUBTAGBITS 3
+#define IMMDSUBTAGMASK ((1LL << IMMDSUBTAGBITS) - 1)
+#define IMMDPAYLOADSHIFT (TAGBITS + IMMDSUBTAGBITS)
+// immediate Lisp_Type values are IMMDTYPEBASE + subtag
+#define IMMDTYPEBASE (1 << TAGBITS)
+#define FLOTSHIFT 32
 
 #define MANY 999
 #define UNEVALLED 888
@@ -41,22 +47,51 @@ typedef uint64_t Lisp_Object;
 
 typedef enum
 {
-  LISP_INTG = 0x0,
-  LISP_STRG = 0x1,
-  LISP_SYMB = 0x2,
-  LISP_CONS = 0x3,
-  LISP_VECT = 0x4,
-  LISP_SUBR = 0x5,
-  LISP_LMBD = 0x6,
+  LISP_TAG_INTG = 0x0,
+  LISP_TAG_STRG = 0x1,
+  LISP_TAG_SYMB = 0x2,
+  LISP_TAG_CONS = 0x3,
+  LISP_TAG_SUBR = 0x4,
+  LISP_TAG_LMBD = 0x5,
+  LISP_TAG_IMMD = 0x6,
+  LISP_TAG_CPLX = 0x7,
+} Lisp_Tag;
+
+typedef enum
+{
+  // xx0: only the lowest bit counts, the other two belong to the float
+  LISP_TAG_FLOT = 0x0,
+  LISP_TAG_CHAR = 0x1,
+} Lisp_Immd_Subtag;
+
+typedef enum
+{
+  // direct tags
+  LISP_INTG = LISP_TAG_INTG,
+  LISP_STRG = LISP_TAG_STRG,
+  LISP_SYMB = LISP_TAG_SYMB,
+  LISP_CONS = LISP_TAG_CONS,
+  LISP_SUBR = LISP_TAG_SUBR,
+  LISP_LMBD = LISP_TAG_LMBD,
+  // immediate types
+  LISP_CHAR = IMMDTYPEBASE + LISP_TAG_CHAR,
+  LISP_FLOT = IMMDTYPEBASE + LISP_TAG_FLOT,
+  // complex types
+  LISP_VECT = IMMDTYPEBASE + (1 << IMMDSUBTAGBITS),
 } Lisp_Type;
 
+// TODO use GMP for arbitrary big integers
 typedef int64_t Lisp_Integer;
+// TODO box a double in some way (reduce the exponent?)
+typedef float Lisp_Float; 
+// TODO use 32 bit integer and handle utf8 and whathever
+typedef unsigned char Lisp_Char;
 typedef struct lisp_string Lisp_String;
 typedef struct lisp_symbol Lisp_Symbol;
 typedef struct lisp_cons Lisp_Cons;
-typedef struct lisp_vector Lisp_Vector;
 typedef struct lisp_subr Lisp_Subr;
 typedef struct lisp_lambda Lisp_Lambda;
+typedef struct lisp_vector Lisp_Vector;
 
 typedef Lisp_Object (*lisp_subr_fun_0) (void);
 typedef Lisp_Object (*lisp_subr_fun_1) (Lisp_Object arg1);
@@ -107,13 +142,6 @@ struct lisp_symbol
   struct lisp_symbol *next;
 };
 
-struct lisp_vector
-{
-  size_t size;
-  // flexible array member
-  Lisp_Object contents[];
-};
-
 union lisp_subr_fun
 {
   lisp_subr_fun_0 f0;
@@ -149,19 +177,19 @@ struct lisp_lambda
   Lisp_Object args[];
 };
 
-/* Type checking */
+// complex types
 
-static inline Lisp_Type
-type_of (Lisp_Object v)
+struct lisp_cplx_header
 {
-  return (Lisp_Type)(v & TAGMASK);
-}
+  Lisp_Type type;
+};
 
-static inline int
-is_type (Lisp_Object v, Lisp_Type t)
+struct lisp_vector
 {
-  return type_of (v) == t;
-}
+  struct lisp_cplx_header header;
+  size_t size;
+  Lisp_Object contents[];
+};
 
 /* Conversion from/to boxed Lisp_Object to/from explicit types */
 
@@ -222,7 +250,7 @@ unbox_cons (Lisp_Object v)
 static inline Lisp_Object
 box_vector (Lisp_Vector *s)
 {
-  return ((uint64_t)s) | LISP_VECT;
+  return ((uint64_t)s) | LISP_TAG_CPLX;
 }
 
 static inline Lisp_Vector *
@@ -255,6 +283,79 @@ unbox_lambda (Lisp_Object v)
   return (Lisp_Lambda *)unbox_pointer (v);
 }
 
+static inline Lisp_Object
+box_char (Lisp_Char c)
+{
+  return ((uint64_t)c << IMMDPAYLOADSHIFT)
+         | ((uint64_t)LISP_TAG_CHAR << TAGBITS) | LISP_TAG_IMMD;
+}
+
+static inline Lisp_Char
+unbox_char (Lisp_Object v)
+{
+  return (Lisp_Char)(v >> IMMDPAYLOADSHIFT);
+}
+
+static inline Lisp_Object
+box_float (Lisp_Float f)
+{
+  uint32_t bits;
+  memcpy (&bits, &f, sizeof bits);
+  return ((uint64_t)bits << FLOTSHIFT) | ((uint64_t)LISP_TAG_FLOT << TAGBITS)
+         | LISP_TAG_IMMD;
+}
+
+static inline Lisp_Float
+unbox_float (Lisp_Object v)
+{
+  uint32_t bits = (uint32_t)(v >> FLOTSHIFT);
+  Lisp_Float f;
+  memcpy (&f, &bits, sizeof f);
+  return f;
+}
+
+
+/* Type checking */
+
+static inline Lisp_Tag
+tag_of (Lisp_Object v)
+{
+  return (Lisp_Tag)(v & TAGMASK);
+}
+
+static inline Lisp_Type
+immediate_type_of (Lisp_Object v)
+{
+  Lisp_Immd_Subtag subtag
+      = (Lisp_Immd_Subtag)((v >> TAGBITS) & IMMDSUBTAGMASK);
+  if ((subtag & 1) == 0)
+    return LISP_FLOT;
+  return (Lisp_Type)(IMMDTYPEBASE + subtag);
+}
+
+static inline Lisp_Type
+complex_type_of (Lisp_Object v)
+{
+  return ((struct lisp_cplx_header *)(unbox_pointer (v)))->type;
+}
+
+static inline Lisp_Type
+type_of (Lisp_Object v)
+{
+  Lisp_Tag tag = tag_of (v);
+  if (tag < LISP_TAG_IMMD)
+    return (Lisp_Type)tag;
+  if (tag == LISP_TAG_IMMD)
+    return immediate_type_of (v);
+  return complex_type_of (v);
+}
+
+static inline int
+is_type (Lisp_Object v, Lisp_Type t)
+{
+  return type_of (v) == t;
+}
+
 // TODO not inlined
 static inline const char *
 type_name (Lisp_Type t)
@@ -275,9 +376,12 @@ type_name (Lisp_Type t)
       return "SUBR";
     case LISP_LMBD:
       return "LMBD";
-    default:
-      return "UNKN";
+    case LISP_FLOT:
+      return "FLOT";
+    case LISP_CHAR:
+      return "CHAR";
     }
+  return "UNKN";
 }
 
 // builtins.c - builtin functions and globals

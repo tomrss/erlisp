@@ -14,12 +14,16 @@ static TestResult test_lexer_mix ();
 static TestResult test_lexer_defer_eval ();
 static TestResult test_lexer_comments ();
 static TestResult test_lexer_unterminated_str ();
+static TestResult test_lexer_float ();
+static TestResult test_lexer_char ();
 
 static TestCase test_lexer_cases[] = {
   { .skip = 0, .name = "mix", .run = &test_lexer_mix },
   { .skip = 0, .name = "defer-eval", .run = &test_lexer_defer_eval },
   { .skip = 0, .name = "comments", .run = &test_lexer_comments },
   { .skip = 0, .name = "unterm-str", .run = &test_lexer_unterminated_str },
+  { .skip = 0, .name = "float", .run = &test_lexer_float },
+  { .skip = 0, .name = "char", .run = &test_lexer_char },
   {}, // terminator
 };
 
@@ -30,6 +34,7 @@ static TestResult assert_tok_int_literal (Token tok, int expected);
 static TestResult assert_tok_float_literal (Token tok, double expected);
 static TestResult assert_tok_symbol (Token tok, char *expected);
 static TestResult assert_tok_error (Token tok, char *expected);
+static TestResult assert_tok_char_literal (Token tok, int expected);
 
 TestSuite *
 test_suite_lexer ()
@@ -360,6 +365,101 @@ test_lexer_unterminated_str ()
   return TEST_RESULT_SUCCESS;
 }
 
+static TestResult
+test_lexer_float ()
+{
+  const char *src = "1.5 0.25 3. 42 (a . b)";
+  Lexer *l = lex_init (stream_string (src, strlen (src)));
+  Token tok;
+  TestResult res;
+
+  tok = lex_next (l);
+  res = assert_tok_float_literal (tok, 1.5);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_float_literal (tok, 0.25);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_float_literal (tok, 3.0);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_int_literal (tok, 42);
+  if (!res.success)
+    return res;
+
+  // a lone dot is the dotted pair separator, not a float
+  tok = lex_next (l);
+  res = assert_tok_simple (tok, TOK_LPAREN);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_symbol (tok, "a");
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_symbol (tok, ".");
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_symbol (tok, "b");
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_simple (tok, TOK_RPAREN);
+  if (!res.success)
+    return res;
+
+  lex_close (l);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_lexer_char ()
+{
+  // ?a ?( ?\n ?\s ?\\ ?\( ?ab
+  const char *src = "?a ?( ?\\n ?\\s ?\\\\ ?\\( ?ab";
+  int expected[] = { 'a', '(', '\n', ' ', '\\', '(' };
+  int n = sizeof (expected) / sizeof (expected[0]);
+  Lexer *l = lex_init (stream_string (src, strlen (src)));
+  Token tok;
+  TestResult res;
+
+  for (int i = 0; i < n; i++)
+    {
+      tok = lex_next (l);
+      res = assert_tok_char_literal (tok, expected[i]);
+      if (!res.success)
+        return res;
+    }
+
+  tok = lex_next (l);
+  res = assert_tok_error (tok, "invalid character literal");
+  if (!res.success)
+    return res;
+  lex_close (l);
+
+  // a lone ? at the end of input
+  const char *unterm = "?";
+  l = lex_init (stream_string (unterm, strlen (unterm)));
+  tok = lex_next (l);
+  res = assert_tok_error (tok, "unterminated character literal");
+  if (!res.success)
+    return res;
+  lex_close (l);
+
+  return TEST_RESULT_SUCCESS;
+}
+
 // assertion and helpers
 
 static TestResult
@@ -465,6 +565,25 @@ assert_tok_error (Token tok, char *expected)
     {
       return TEST_RESULT_FAIL ("line %d: expected '%s', got '%s'", tok.line,
                                expected, tok.symbol);
+    }
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+assert_tok_char_literal (Token tok, int expected)
+{
+  if (tok.type != TOK_CHAR_LITERAL)
+    {
+      return TEST_RESULT_FAIL ("line %d: expected %s %d, got %s", tok.line,
+                               lex_token_type (TOK_CHAR_LITERAL), expected,
+                               lex_token_type (tok.type));
+    }
+
+  if (expected != tok.character)
+    {
+      return TEST_RESULT_FAIL ("line %d: expected char %d, got %d", tok.line,
+                               expected, tok.character);
     }
 
   return TEST_RESULT_SUCCESS;

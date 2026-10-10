@@ -16,6 +16,7 @@ typedef enum
   TOK_STRING_LITERAL,
   TOK_INT_LITERAL,
   TOK_FLOAT_LITERAL,
+  TOK_CHAR_LITERAL,
   TOK_SYMBOL,
   TOK_QUOTE,
   TOK_UNQUOTE,
@@ -34,6 +35,7 @@ struct token
   {
     long int integer;
     double floating;
+    unsigned char character; // TODO this not utf8
     char *symbol;
     char *string;
     char *errmsg;

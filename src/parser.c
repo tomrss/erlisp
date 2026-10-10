@@ -55,9 +55,13 @@ parse_sexp_from_tok (Lexer *l, Token tok)
       return q_nil;
     case TOK_INT_LITERAL:
       return box_int (tok.integer);
+    case TOK_FLOAT_LITERAL:
+      return box_float ((float)tok.floating); // TODO this cast is temporary
     case TOK_STRING_LITERAL:
       // TODO lexer could get us the len too instead of null terminated string
       return make_string (tok.string);
+    case TOK_CHAR_LITERAL:
+      return box_char (tok.character);
     case TOK_SYMBOL:
       {
         // TODO this seems reeaaaally wrong

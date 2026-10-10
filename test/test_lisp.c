@@ -20,6 +20,8 @@ static TestResult test_lisp_symbol ();
 static TestResult test_lisp_cons ();
 static TestResult test_lisp_cons_nested ();
 static TestResult test_lisp_vector ();
+static TestResult test_lisp_float ();
+static TestResult test_lisp_char ();
 
 static TestCase test_lisp_cases[] = {
   { .skip = 0, .name = "int32", .run = test_lisp_int32 },
@@ -35,6 +37,8 @@ static TestCase test_lisp_cases[] = {
   { .skip = 0, .name = "cons", .run = test_lisp_cons },
   { .skip = 0, .name = "cons_nested", .run = test_lisp_cons_nested },
   { .skip = 0, .name = "vector", .run = test_lisp_vector },
+  { .skip = 0, .name = "float", .run = test_lisp_float },
+  { .skip = 0, .name = "char", .run = test_lisp_char },
   {}, // terminator
 };
 
@@ -335,6 +339,47 @@ test_lisp_vector ()
       if (uvec->contents[i] != q_nil)
         return TEST_RESULT_FAIL ("vec not initialized correctly");
     }
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_lisp_float ()
+{
+  Lisp_Float values[] = { 0.0f, 1.5f, -0.25f, 3.14159f, 1e30f, -1e-30f };
+  int n = sizeof (values) / sizeof (values[0]);
+
+  for (int i = 0; i < n; i++)
+    {
+      Lisp_Object lf = box_float (values[i]);
+      TEST_CHECK_TYPE ("float", lf, LISP_FLOT);
+      // boxing must be lossless, so exact comparison is fine
+      if (unbox_float (lf) != values[i])
+        return TEST_RESULT_FAIL ("float unboxing produced %g, expected %g",
+                                 (double)unbox_float (lf), (double)values[i]);
+    }
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_lisp_char ()
+{
+  Lisp_Char values[] = { 'a', 'Z', '(', ' ', '\n', '\0', 127 };
+  int n = sizeof (values) / sizeof (values[0]);
+
+  for (int i = 0; i < n; i++)
+    {
+      Lisp_Object lc = box_char (values[i]);
+      TEST_CHECK_TYPE ("char", lc, LISP_CHAR);
+      if (unbox_char (lc) != values[i])
+        return TEST_RESULT_FAIL ("char unboxing produced %d, expected %d",
+                                 (int)unbox_char (lc), (int)values[i]);
+    }
+
+  // a char is not an int with the same value
+  if (eq (box_char ('a'), box_int ('a')))
+    return TEST_RESULT_FAIL ("char ?a is eq to int 97");
 
   return TEST_RESULT_SUCCESS;
 }

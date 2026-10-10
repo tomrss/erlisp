@@ -111,6 +111,7 @@ make_vector (size_t size)
       vec = heaploballoc (allocsize);
     }
 
+  vec->header.type = LISP_VECT;
   vec->size = size;
 
   for (size_t i = 0; i < size; ++i)
@@ -329,6 +330,8 @@ gcmarkobj (Lisp_Object obj)
         gcmarkobj (unbox_vector (obj)->contents[i]);
       break;
     case LISP_INTG:
+    case LISP_CHAR:
+    case LISP_FLOT:
     case LISP_SUBR:
       break;
     }

@@ -56,6 +56,8 @@ eval (Lisp_Object env, Lisp_Object form)
   switch (type_of (form))
     {
     case LISP_INTG:
+    case LISP_CHAR:
+    case LISP_FLOT:
     case LISP_STRG:
     case LISP_VECT:
     case LISP_SUBR:
@@ -69,9 +71,6 @@ eval (Lisp_Object env, Lisp_Object form)
     case LISP_CONS:
       res = call_function (env, form);
       break;
-    default:
-      internal_error (
-          "This is embarassing... We forgot to implment eval for a type!!!");
     }
 
   debug_print_form (res);

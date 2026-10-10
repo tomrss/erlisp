@@ -1,5 +1,4 @@
 #include "lexer.h"
-#include "lisp.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,6 +7,8 @@
 static int eat_spacing_and_comments (Lexer *l, int firstchar);
 static Token parse_number (Lexer *l, int firstchar);
 static Token parse_string (Lexer *l);
+static Token parse_char (Lexer *l);
+static Token parse_comma (Lexer *l);
 static Token try_parse_symbol (Lexer *l, int firstchar);
 static int stream_file_getc (Stream *s);
 static int stream_file_ungetc (int c, Stream *s);
@@ -68,54 +69,27 @@ lex_next (Lexer *l)
   line = l->line;
 
   if (c == EOF)
-    {
-      tok.type = TOK_EOF;
-    }
+    tok.type = TOK_EOF;
   else if (c == '(')
-    {
-      tok.type = TOK_LPAREN;
-    }
+    tok.type = TOK_LPAREN;
   else if (c == ')')
-    {
-      tok.type = TOK_RPAREN;
-    }
+    tok.type = TOK_RPAREN;
   else if (c == '\'')
-    {
-      tok.type = TOK_QUOTE;
-    }
+    tok.type = TOK_QUOTE;
   else if (c == ',')
-    {
-      int next = sgetc (l->stream);
-      if (next == '@')
-        {
-          tok.type = TOK_SPLICE;
-        }
-      else
-        {
-          tok.type = TOK_UNQUOTE;
-          sungetc (next, l->stream);
-        }
-    }
+    tok = parse_comma (l);
   else if (c == '`')
-    {
-      tok.type = TOK_QUASIQUOTE;
-    }
+    tok.type = TOK_QUASIQUOTE;
   else if (c == ')')
-    {
-      tok.type = TOK_RPAREN;
-    }
+    tok.type = TOK_RPAREN;
   else if (isdigit (c))
-    {
-      tok = parse_number (l, c);
-    }
+    tok = parse_number (l, c);
   else if (c == '"')
-    {
-      tok = parse_string (l);
-    }
+    tok = parse_string (l);
+  else if (c == '?')
+    tok = parse_char (l);
   else
-    {
-      tok = try_parse_symbol (l, c);
-    }
+    tok = try_parse_symbol (l, c);
 
   tok.line = line;
 
@@ -256,6 +230,67 @@ parse_string (Lexer *l)
 }
 
 static Token
+parse_char (Lexer *l)
+{
+  Token tok;
+  int c = sgetc (l->stream);
+
+  tok.type = TOK_ERROR;
+  if (c == '\\')
+    {
+      // escaped: ?\n ?\t ?\s are special, any other ?\x is just x,
+      // e.g. ?\( ?\\ ?\"
+      c = sgetc (l->stream);
+      switch (c)
+        {
+        case 'n':
+          c = '\n';
+          break;
+        case 't':
+          c = '\t';
+          break;
+        case 'r':
+          c = '\r';
+          break;
+        case 's':
+          c = ' ';
+          break;
+        case 'e':
+          c = 27; // escape
+          break;
+        case '0':
+          c = '\0';
+          break;
+        }
+    }
+
+  if (c == EOF)
+    {
+      tok.errmsg = "unterminated character literal";
+      return tok;
+    }
+  if (c < 0 || c > 0x7F)
+    {
+      tok.errmsg = "non-ascii character literal";
+      return tok;
+    }
+
+  // ?ab is not a character
+  int next = sgetc (l->stream);
+  sungetc (next, l->stream);
+  if (next != EOF && !isspace (next) && next != '(' && next != ')'
+      && next != '\'' && next != '"' && next != ';')
+    {
+      tok.errmsg = "invalid character literal";
+      return tok;
+    }
+
+  tok.type = TOK_CHAR_LITERAL;
+  tok.character = c;
+  return tok;
+}
+
+static Token
 try_parse_symbol (Lexer *l, int firstchar)
 {
   Token tok;   // token to parse
@@ -298,6 +333,21 @@ try_parse_symbol (Lexer *l, int firstchar)
   return tok;
 }
 
+static Token
+parse_comma (Lexer *l)
+{
+  Token tok;
+  int next = sgetc (l->stream);
+  if (next == '@')
+    tok.type = TOK_SPLICE;
+  else
+    {
+      tok.type = TOK_UNQUOTE;
+      sungetc (next, l->stream);
+    }
+  return tok;
+}
+
 char *
 lex_token_type (TokenType tt)
 {
@@ -313,6 +363,8 @@ lex_token_type (TokenType tt)
       return "INT_LITERAL";
     case TOK_FLOAT_LITERAL:
       return "FLOAT_LITERAL";
+    case TOK_CHAR_LITERAL:
+      return "CHAR_LITERAL";
     case TOK_SYMBOL:
       return "SYMBOL";
     case TOK_QUOTE:
@@ -349,7 +401,8 @@ stream_string_getc (Stream *s)
 {
   if (s->source.string.pos >= s->source.string.size)
     return EOF;
-  return s->source.string.data[s->source.string.pos++];
+  // like getc, bytes are returned as unsigned so that 0xFF is not EOF
+  return (unsigned char)s->source.string.data[s->source.string.pos++];
 }
 
 static int
@@ -357,5 +410,5 @@ stream_string_ungetc (int c, Stream *s)
 {
   if (c == EOF || s->source.string.pos < 1)
     return EOF;
-  return s->source.string.data[--s->source.string.pos];
+  return (unsigned char)s->source.string.data[--s->source.string.pos];
 }
