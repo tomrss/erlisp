@@ -294,7 +294,7 @@ Lisp_Object f_cadr (Lisp_Object cons);
 Lisp_Object f_cddr (Lisp_Object cons);
 Lisp_Object f_eq_p (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_equal_p (Lisp_Object key, Lisp_Object alist);
-Lisp_Object f_setq (Lisp_Object symbol, Lisp_Object value);
+Lisp_Object f_setq (Lisp_Object form);
 Lisp_Object f_eval (Lisp_Object form);
 Lisp_Object f_assoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_assq (Lisp_Object key, Lisp_Object alist);

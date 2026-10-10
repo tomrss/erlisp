@@ -193,11 +193,23 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
 }
 
 Lisp_Object
-f_setq (Lisp_Object symbol, Lisp_Object value)
+f_setq (Lisp_Object form)
 {
+  Lisp_Object symbol = f_car (form);
   check_type (symbol, LISP_SYMB);
 
-  env_define (env_current (), symbol, value);
+  Lisp_Object value = f_eval (f_cadr (form));
+  Lisp_Object binding = env_lookup_cell (env_current (), symbol);
+
+  if (!nil (binding))
+    // local
+    f_setcdr (binding, value);
+  else if (!unbound (unbox_symbol (symbol)->value))
+    // global
+    unbox_symbol (symbol)->value = value;
+  else
+    unbound_error (symbol);
+
   return value;
 }
 
@@ -750,7 +762,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("cddr", 1, 1, f_cddr));
   obarray_put (o, DEFSUBR ("eq?", 2, 2, f_eq_p));
   obarray_put (o, DEFSUBR ("equal?", 2, 2, f_equal_p));
-  obarray_put (o, DEFSUBR ("set!", 2, 2, f_setq));
+  obarray_put (o, DEFSUBR ("set!", 2, UNEVALLED, f_setq));
   obarray_put (o, DEFSUBR ("eval", 1, 1, f_eval));
   obarray_put (o, DEFSUBR ("assoc", 2, 2, f_assoc));
   obarray_put (o, DEFSUBR ("assq", 2, 2, f_assq));

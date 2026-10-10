@@ -27,6 +27,8 @@ static TestResult test_eval_signal ();
 static TestResult test_eval_lexical_closure ();
 static TestResult test_eval_lexical_caller_locals ();
 static TestResult test_eval_lexical_counter ();
+static TestResult test_eval_setq_scopes ();
+static TestResult test_eval_setq_unbound ();
 static TestResult test_eval_lexical_inner_define ();
 static TestResult test_eval_lexical_gc_caller_locals ();
 static TestResult test_eval_lexical_head_eval ();
@@ -57,6 +59,8 @@ static TestCase test_eval_cases[] = {
   { .skip = 0, .name = "lex closure", .run = test_eval_lexical_closure },
   { .skip = 0, .name = "lex locals", .run = test_eval_lexical_caller_locals },
   { .skip = 0, .name = "lex counter", .run = test_eval_lexical_counter },
+  { .skip = 0, .name = "set! scopes", .run = test_eval_setq_scopes },
+  { .skip = 0, .name = "set! unbound", .run = test_eval_setq_unbound },
   { .skip = 0,
     .name = "lex inner def",
     .run = test_eval_lexical_inner_define },
@@ -679,6 +683,121 @@ test_eval_lexical_counter ()
   TEST_CHECK_TYPE ("result", res, LISP_INTG);
   TEST_ASSERT (unbox_int (res) == 32, "expected %d, got %ld", 32,
                unbox_int (res));
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_eval_setq_scopes ()
+{
+  /*
+    set! modifies the innermost binding: the global one when there is no local
+    binding, the local one when it shadows the global:
+
+    (progn
+      (define v 1)
+      (set! v 2)
+      (define get-v (lambda () v))
+      (define set-v (lambda (x) (set! v x)))
+      (define shadow (lambda (v) (set! v 10) v))
+      (set-v 3)
+      (+ (* 100 (shadow 5)) (* 10 (let ((v 7)) (set! v 8) v)) (get-v)))
+      ---> 1083
+   */
+  Lisp_Object v = make_str_symbol ("v");
+  Lisp_Object x = make_str_symbol ("x");
+  Lisp_Object getv = make_str_symbol ("get-v");
+  Lisp_Object setv = make_str_symbol ("set-v");
+  Lisp_Object shadow = make_str_symbol ("shadow");
+
+  Lisp_Object let
+      = mklist (4, sym ("let"), mklist (1, mklist (2, v, box_int (7))),
+                mklist (3, sym ("set!"), v, box_int (8)), v);
+
+  Lisp_Object form = mklist (
+      8, sym ("progn"), mklist (3, sym ("define"), v, box_int (1)),
+      mklist (3, sym ("set!"), v, box_int (2)),
+      mklist (3, sym ("define"), getv, mklist (3, sym ("lambda"), q_nil, v)),
+      mklist (3, sym ("define"), setv,
+              mklist (3, sym ("lambda"), mklist (1, x),
+                      mklist (3, sym ("set!"), v, x))),
+      mklist (3, sym ("define"), shadow,
+              mklist (4, sym ("lambda"), mklist (1, v),
+                      mklist (3, sym ("set!"), v, box_int (10)), v)),
+      mklist (2, setv, box_int (3)),
+      mklist (4, sym ("+"),
+              mklist (3, sym ("*"), box_int (100),
+                      mklist (2, shadow, box_int (5))),
+              mklist (3, sym ("*"), box_int (10), let), mklist (1, getv)));
+
+  Lisp_Object res;
+  TEST_ASSERT (safe_eval (l_globalenv, form, &res), "unexpected %s",
+               errname (res));
+  TEST_CHECK_TYPE ("result", res, LISP_INTG);
+  TEST_ASSERT (unbox_int (res) == 1083, "expected %d, got %ld", 1083,
+               unbox_int (res));
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_eval_setq_unbound ()
+{
+  /*
+    set! from an inner scope modifies the binding of the outer scope:
+
+    (let ((n 1))
+      (let ((m 2))
+        (set! n (+ n m)))
+      n)
+      ---> 3
+
+    set! of a symbol with no binding is an error, and does not create one,
+    both inside a lambda and at top level:
+
+    ((lambda () (set! w 1)))
+      ---> unbound-error
+
+    (set! w 1)
+      ---> unbound-error
+
+    w
+      ---> unbound-error
+   */
+  Lisp_Object n = make_str_symbol ("n");
+  Lisp_Object m = make_str_symbol ("m");
+  Lisp_Object w = make_str_symbol ("w");
+
+  Lisp_Object inner = mklist (
+      3, sym ("let"), mklist (1, mklist (2, m, box_int (2))),
+      mklist (3, sym ("set!"), n, mklist (3, sym ("+"), n, m)));
+  Lisp_Object form = mklist (4, sym ("let"),
+                             mklist (1, mklist (2, n, box_int (1))), inner, n);
+
+  Lisp_Object res;
+  TEST_ASSERT (safe_eval (l_globalenv, form, &res), "unexpected %s",
+               errname (res));
+  TEST_CHECK_TYPE ("result", res, LISP_INTG);
+  TEST_ASSERT (unbox_int (res) == 3, "expected %d, got %ld", 3,
+               unbox_int (res));
+
+  Lisp_Object setw = mklist (3, sym ("set!"), w, box_int (1));
+
+  form = mklist (1, mklist (3, sym ("lambda"), q_nil, setw));
+  TEST_ASSERT (!safe_eval (l_globalenv, form, &res),
+               "expected unbound-error in lambda, got no error");
+  TEST_ASSERT (eq (f_error_symbol (res), q_error_unbound),
+               "expected unbound-error in lambda, got %s", errname (res));
+
+  TEST_ASSERT (!safe_eval (l_globalenv, setw, &res),
+               "expected unbound-error at top level, got no error");
+  TEST_ASSERT (eq (f_error_symbol (res), q_error_unbound),
+               "expected unbound-error at top level, got %s", errname (res));
+
+  TEST_ASSERT (!safe_eval (l_globalenv, w, &res),
+               "expected w to be still unbound");
+  TEST_ASSERT (eq (f_error_symbol (res), q_error_unbound),
+               "expected unbound-error, got %s", errname (res));
 
   return TEST_RESULT_SUCCESS;
 }

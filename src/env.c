@@ -23,9 +23,15 @@ env_define (Lisp_Object env, Lisp_Object symbol, Lisp_Object value)
 }
 
 Lisp_Object
+env_lookup_cell (Lisp_Object env, Lisp_Object symbol)
+{
+  return f_assq (symbol, env);
+}
+
+Lisp_Object
 env_lookup (Lisp_Object env, Lisp_Object symbol)
 {
-  Lisp_Object cell = f_assq (symbol, env);
+  Lisp_Object cell = env_lookup_cell (env, symbol);
   return nil (cell) ? q_unbound : f_cdr (cell);
 }
 
