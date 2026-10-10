@@ -8,7 +8,6 @@
 #include "parser.h"
 #include "stack.h"
 #include <errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -243,12 +242,7 @@ f_number_to_string (Lisp_Object number)
   check_type (number, LISP_INTG);
 
   Lisp_Integer unumber = unbox_int (number);
-  if (unumber == 0)
-    return make_string ("0");
-
-  size_t size = floor (log10 (unumber > 0 ? unumber : -unumber)) + 1;
-  if (unumber < 0)
-    size++; // minus sign
+  size_t size = snprintf (NULL, 0, "%lld", unumber);
 
   Lisp_Object string = make_uninit_string (size);
 
