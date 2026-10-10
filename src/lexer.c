@@ -353,9 +353,9 @@ stream_string_getc (Stream *s)
 }
 
 static int
-stream_string_ungetc (UNUSED int _, Stream *s)
+stream_string_ungetc (int c, Stream *s)
 {
-  if (s->source.string.pos < 1)
-    return 0;
+  if (c == EOF || s->source.string.pos < 1)
+    return EOF;
   return s->source.string.data[--s->source.string.pos];
 }

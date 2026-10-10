@@ -15,7 +15,7 @@ TEST_SOURCES := $(wildcard $(TEST_DIR)/*.c)
 TEST_OBJECTS := $(patsubst $(TEST_DIR)/test_%.c,$(OBJ_DIR)/test_%.o,$(TEST_SOURCES))
 
 
-.PHONY: all debug clean test run
+.PHONY: all debug clean test test-debug run
 
 all: $(TARGET)
 
@@ -34,6 +34,12 @@ $(OBJ_DIR):
 	mkdir -p $(OBJ_DIR)
 
 test: test_$(TARGET)
+	./$(TEST_DIR)/$<
+
+test-debug: CFLAGS = -Wall -Wextra -O0 -g -fsanitize=address -DHAVE_READLINE=1
+test-debug: LDFLAGS = -g -fsanitize=address
+test-debug: LDLIBS += -fsanitize=address
+test-debug: test_$(TARGET)
 	./$(TEST_DIR)/$<
 
 $(OBJ_DIR)/test_%.o: $(TEST_DIR)/test_%.c | $(OBJ_DIR)
