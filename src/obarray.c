@@ -22,7 +22,7 @@ obarray_put (Lisp_Object obarray, Lisp_Object symbol)
   Lisp_Object found = obarray_lookup_name (obarray, usymbol->name);
 
   // the get function returns the bucket index in case of not found
-  if (type_of (found) != LISP_INTG)
+  if (!intp (found))
     // not an integer, this means: found!
     return found;
 

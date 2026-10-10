@@ -140,7 +140,7 @@ call_function (Lisp_Object env, Lisp_Object form)
       lambda = unbox_lambda (fun);
       minargs = lambda->minargs;
       maxargs = lambda->maxargs;
-      if (type_of (funyielding) == LISP_SYMB)
+      if (symbolp (funyielding))
         fname = unbox_string (unbox_symbol (funyielding)->name)->data;
       else
         fname = "anonymous";

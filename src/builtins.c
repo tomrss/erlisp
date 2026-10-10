@@ -195,6 +195,54 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
 }
 
 Lisp_Object
+f_number_p (Lisp_Object o)
+{
+  return BOOL (numberp (o));
+}
+
+Lisp_Object
+f_list_p (Lisp_Object o)
+{
+  return BOOL (listp (o));
+}
+
+Lisp_Object
+f_cons_p (Lisp_Object o)
+{
+  return BOOL (consp (o));
+}
+
+Lisp_Object
+f_symbol_p (Lisp_Object o)
+{
+  return BOOL (symbolp (o));
+}
+
+Lisp_Object
+f_string_p (Lisp_Object o)
+{
+  return BOOL (stringp (o));
+}
+
+Lisp_Object
+f_vector_p (Lisp_Object o)
+{
+  return BOOL (vectorp (o));
+}
+
+Lisp_Object
+f_char_p (Lisp_Object o)
+{
+  return BOOL (charp (o));
+}
+
+Lisp_Object
+f_nil_p (Lisp_Object o)
+{
+  return BOOL (nil (o));
+}
+
+Lisp_Object
 f_setq (Lisp_Object form)
 {
   Lisp_Object symbol = f_car (form);
@@ -308,9 +356,9 @@ Lisp_Object
 f_length (Lisp_Object list)
 {
   if (nil (list))
-    return 0;
+    return box_int (0);
 
-  if (type_of (list) == LISP_CONS)
+  if (consp (list))
     {
       int64_t length = 0;
       Lisp_Object tail = list;
@@ -324,7 +372,7 @@ f_length (Lisp_Object list)
       return box_int (length);
     }
 
-  if (type_of (list) == LISP_STRG)
+  if (stringp (list))
     return f_string_length (list);
 
   type_error_2 (list, LISP_CONS, LISP_STRG);
@@ -681,7 +729,7 @@ f_intern (Lisp_Object name)
 
   Lisp_Object symbol;
   symbol = obarray_lookup_name (v_obarray, name);
-  if (type_of (symbol) == LISP_SYMB)
+  if (symbolp (symbol))
     return symbol;
 
   symbol = make_symbol (name);
@@ -777,6 +825,14 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("cddr", 1, 1, f_cddr));
   obarray_put (o, DEFSUBR ("eq?", 2, 2, f_eq_p));
   obarray_put (o, DEFSUBR ("equal?", 2, 2, f_equal_p));
+  obarray_put (o, DEFSUBR ("number?", 1, 1, f_number_p));
+  obarray_put (o, DEFSUBR ("list?", 1, 1, f_list_p));
+  obarray_put (o, DEFSUBR ("cons?", 1, 1, f_cons_p));
+  obarray_put (o, DEFSUBR ("symbol?", 1, 1, f_symbol_p));
+  obarray_put (o, DEFSUBR ("string?", 1, 1, f_string_p));
+  obarray_put (o, DEFSUBR ("vector?", 1, 1, f_vector_p));
+  obarray_put (o, DEFSUBR ("char?", 1, 1, f_char_p));
+  obarray_put (o, DEFSUBR ("nil?", 1, 1, f_nil_p));
   obarray_put (o, DEFSUBR ("set!", 2, UNEVALLED, f_setq));
   obarray_put (o, DEFSUBR ("eval", 1, 1, f_eval));
   obarray_put (o, DEFSUBR ("assoc", 2, 2, f_assoc));
@@ -831,7 +887,7 @@ assoc_w_pred (Lisp_Object key, Lisp_Object alist,
   for (tail = alist; !nil (tail); tail = f_cdr (tail))
     {
       Lisp_Object elt = f_car (tail);
-      if (type_of (elt) != LISP_CONS)
+      if (!consp (elt))
         // ignore it: emacs does this, other lisps error. i like this
         // because its flexible and easy to implement
         continue;
@@ -846,10 +902,10 @@ rassoc_w_pred (Lisp_Object key, Lisp_Object alist,
                Lisp_Object (*keypred) (Lisp_Object k1, Lisp_Object k2))
 {
   Lisp_Object tail;
-  for (tail = alist; tail != q_nil; tail = f_cdr (tail))
+  for (tail = alist; !nil (tail); tail = f_cdr (tail))
     {
       Lisp_Object elt = f_car (tail);
-      if (type_of (elt) != LISP_CONS)
+      if (!consp (elt))
         // ignore it: emacs does this, other lisps error. i like this
         // because its flexible and easy to implement
         continue;

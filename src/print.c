@@ -142,8 +142,8 @@ print_error (Lisp_Object err)
   // data is usually a list of objects, e.g. (symbol) for unbound-error:
   // print its elements. anything else (e.g. an int) is printed as is
   Lisp_Object data = f_error_data (err);
-  if (type_of (data) == LISP_CONS)
-    for (Lisp_Object tail = data; type_of (tail) == LISP_CONS;
+  if (consp (data))
+    for (Lisp_Object tail = data; consp (tail);
          tail = unbox_cons (tail)->cdr)
       {
         fprintf (stderr, " ");

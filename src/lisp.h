@@ -34,7 +34,7 @@
 #define NSUBR(N, fun)                                                         \
   (union lisp_subr_fun) { .f##N = fun }
 
-#define BOOL(expr) (expr) ? q_t : q_nil
+#define BOOL(expr) ((expr) ? q_t : q_nil)
 
 #ifdef __GNUC__
 #define UNUSED __attribute__ ((__unused__))
@@ -398,6 +398,14 @@ Lisp_Object f_cadr (Lisp_Object cons);
 Lisp_Object f_cddr (Lisp_Object cons);
 Lisp_Object f_eq_p (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_equal_p (Lisp_Object key, Lisp_Object alist);
+Lisp_Object f_number_p (Lisp_Object o);
+Lisp_Object f_list_p (Lisp_Object o);
+Lisp_Object f_cons_p (Lisp_Object o);
+Lisp_Object f_symbol_p (Lisp_Object o);
+Lisp_Object f_string_p (Lisp_Object o);
+Lisp_Object f_vector_p (Lisp_Object o);
+Lisp_Object f_char_p (Lisp_Object o);
+Lisp_Object f_null_p (Lisp_Object o);
 Lisp_Object f_setq (Lisp_Object form);
 Lisp_Object f_eval (Lisp_Object form);
 Lisp_Object f_assoc (Lisp_Object key, Lisp_Object alist);
@@ -478,6 +486,63 @@ static inline int
 unbound (Lisp_Object o)
 {
   return eq (o, q_unbound);
+}
+
+static inline int
+intp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_INTG;
+}
+
+static inline int
+floatp (Lisp_Object o)
+{
+  // only the lowest subtag bit counts, see Lisp_Immd_Subtag
+  return tag_of (o) == LISP_TAG_IMMD
+         && ((o >> TAGBITS) & 1) == LISP_TAG_FLOT;
+}
+
+static inline int
+numberp (Lisp_Object o)
+{
+  return intp (o) || floatp (o);
+}
+
+static inline int
+consp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_CONS;
+}
+
+static inline int
+listp (Lisp_Object o)
+{
+  return nil (o) || consp (o);
+}
+
+static inline int
+symbolp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_SYMB;
+}
+
+static inline int
+stringp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_STRG;
+}
+
+static inline int
+vectorp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_CPLX && complex_type_of (o) == LISP_VECT;
+}
+
+static inline int
+charp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_IMMD
+         && ((o >> TAGBITS) & IMMDSUBTAGMASK) == LISP_TAG_CHAR;
 }
 
 #endif // LISP_H

@@ -75,7 +75,7 @@ parse_sexp_from_tok (Lexer *l, Token tok)
         // TODO use intern function instead of this
         Lisp_Object obsym = obarray_lookup_name (v_obarray, box_string (s));
         Lisp_Object ret;
-        if (type_of (obsym) == LISP_SYMB)
+        if (symbolp (obsym))
           // return the symbol found
           ret = obsym;
         else
