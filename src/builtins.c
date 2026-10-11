@@ -195,6 +195,13 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
 }
 
 Lisp_Object
+f_eqv_p (Lisp_Object x, Lisp_Object y)
+{
+  // at the moment with no big num and no floats in heap, eq is sufficient
+  return f_eq_p (x, y);
+}
+
+Lisp_Object
 f_number_p (Lisp_Object o)
 {
   return BOOL (numberp (o));
@@ -523,6 +530,15 @@ f_divide (int argc, Lisp_Object *argv)
     }
 
   return arith_fold (OP_DIV, argc, argv);
+}
+
+Lisp_Object
+f_num_eq (Lisp_Object x, Lisp_Object y)
+{
+  if (intp (x) && intp (y))
+    return BOOL (x == y);
+
+  return BOOL (to_float (x) == to_float (y));
 }
 
 Lisp_Object
@@ -904,6 +920,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("cddr", 1, 1, f_cddr));
   obarray_put (o, DEFSUBR ("eq?", 2, 2, f_eq_p));
   obarray_put (o, DEFSUBR ("equal?", 2, 2, f_equal_p));
+  obarray_put (o, DEFSUBR ("eqv?", 2, 2, f_eqv_p));
   obarray_put (o, DEFSUBR ("number?", 1, 1, f_number_p));
   obarray_put (o, DEFSUBR ("list?", 1, 1, f_list_p));
   obarray_put (o, DEFSUBR ("cons?", 1, 1, f_cons_p));
@@ -928,6 +945,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("-", 1, MANY, f_subtract));
   obarray_put (o, DEFSUBR ("*", 0, MANY, f_multiply));
   obarray_put (o, DEFSUBR ("/", 1, MANY, f_divide));
+  obarray_put (o, DEFSUBR ("=", 2, 2, f_num_eq));
   obarray_put (o, DEFSUBR (">", 2, 2, f_ge));
   obarray_put (o, DEFSUBR (">=", 2, 2, f_geq));
   obarray_put (o, DEFSUBR ("<", 2, 2, f_le));

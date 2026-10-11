@@ -87,6 +87,7 @@ static TestResult test_builtins_rassoc ();
 static TestResult test_builtins_rassq ();
 static TestResult test_builtins_eq ();
 static TestResult test_builtins_equal ();
+static TestResult test_builtins_eqv ();
 static TestResult test_builtins_symbol ();
 static TestResult test_builtins_symbol_value ();
 static TestResult test_builtins_vector ();
@@ -102,6 +103,7 @@ static TestResult test_builtins_subtract ();
 static TestResult test_builtins_multiply ();
 static TestResult test_builtins_divide ();
 static TestResult test_builtins_compare ();
+static TestResult test_builtins_num_eq ();
 static TestResult test_builtins_and ();
 static TestResult test_builtins_or ();
 static TestResult test_builtins_if ();
@@ -132,6 +134,7 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "rassq", .run = test_builtins_rassq },
   { .skip = 0, .name = "eq?", .run = test_builtins_eq },
   { .skip = 0, .name = "equal?", .run = test_builtins_equal },
+  { .skip = 0, .name = "eqv?", .run = test_builtins_eqv },
   { .skip = 0, .name = "symbol", .run = test_builtins_symbol },
   { .skip = 0, .name = "symbol_value", .run = test_builtins_symbol_value },
   { .skip = 0, .name = "vector", .run = test_builtins_vector },
@@ -147,6 +150,7 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "*", .run = test_builtins_multiply },
   { .skip = 0, .name = "/", .run = test_builtins_divide },
   { .skip = 0, .name = "> >= < <=", .run = test_builtins_compare },
+  { .skip = 0, .name = "=", .run = test_builtins_num_eq },
   { .skip = 0, .name = "and", .run = test_builtins_and },
   { .skip = 0, .name = "or", .run = test_builtins_or },
   { .skip = 0, .name = "if", .run = test_builtins_if },
@@ -330,6 +334,36 @@ test_builtins_equal ()
   EXPECT_FORM ("(equal? '(1 (2 \"x\")) '(1 (2 \"x\")))", "t");
   EXPECT_FORM ("(equal? '(1 2) '(1 3))", "nil");
   EXPECT_FORM ("(equal? '(1 2) '(1))", "nil");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_eqv ()
+{
+  EXPECT_FORM ("(eqv? 'a 'a)", "t");
+  EXPECT_FORM ("(eqv? 'a 'b)", "nil");
+  EXPECT_FORM ("(eqv? nil nil)", "t");
+  // numbers are compared by value, within the same type
+  EXPECT_FORM ("(eqv? 1 1)", "t");
+  EXPECT_FORM ("(eqv? 1 2)", "nil");
+  EXPECT_FORM ("(eqv? (+ 1 2) 3)", "t");
+  EXPECT_FORM ("(eqv? 1.5 1.5)", "t");
+  EXPECT_FORM ("(eqv? 1.5 2.5)", "nil");
+  EXPECT_FORM ("(eqv? (+ 1.0 0.5) 1.5)", "t");
+  // an int and a float are never eqv?, even with the same value
+  EXPECT_FORM ("(eqv? 1 1.0)", "nil");
+  EXPECT_FORM ("(eqv? 1.0 1)", "nil");
+  EXPECT_FORM ("(eqv? 0 0.0)", "nil");
+  // unlike =, 0.0 and -0.0 are not eqv?
+  EXPECT_FORM ("(eqv? 0.0 (- 0.0))", "nil");
+  // everything else is compared by identity
+  EXPECT_FORM ("(eqv? '(1) '(1))", "nil");
+  EXPECT_FORM ("(let ((eqv-x '(1))) (eqv? eqv-x eqv-x))", "t");
+  EXPECT_FORM ("(eqv? \"ab\" \"ab\")", "nil");
+  EXPECT_FORM ("(let ((eqv-s \"ab\")) (eqv? eqv-s eqv-s))", "t");
+  // any type is accepted, no type error
+  EXPECT_FORM ("(eqv? 1 \"1\")", "nil");
+  EXPECT_FORM ("(eqv? 'a 1.5)", "nil");
   return TEST_RESULT_SUCCESS;
 }
 
@@ -565,6 +599,32 @@ test_builtins_compare ()
   EXPECT_ERROR ("(>= \"a\" 1.5)", q_error_type);
   EXPECT_ERROR ("(< 1.5 \"a\")", q_error_type);
   EXPECT_ERROR ("(<= \"a\" 1)", q_error_type);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_num_eq ()
+{
+  EXPECT_FORM ("(= 1 1)", "t");
+  EXPECT_FORM ("(= 1 2)", "nil");
+  EXPECT_FORM ("(= (+ 1 2) 3)", "t");
+  EXPECT_FORM ("(= 1.5 1.5)", "t");
+  EXPECT_FORM ("(= 1.5 2.5)", "nil");
+  // ints and floats are compared by numeric value, in both argument orders
+  EXPECT_FORM ("(= 1 1.0)", "t");
+  EXPECT_FORM ("(= 1.0 1)", "t");
+  EXPECT_FORM ("(= 0 0.0)", "t");
+  EXPECT_FORM ("(= 2 1.5)", "nil");
+  EXPECT_FORM ("(= 1.5 2)", "nil");
+  EXPECT_FORM ("(= (- 1) (- 1.0))", "t");
+  // IEEE 754: 0.0 and -0.0 are equal
+  EXPECT_FORM ("(= 0.0 (- 0.0))", "t");
+  EXPECT_FORM ("(= 0 (- 0.0))", "t");
+  // only numbers are accepted, on either argument
+  EXPECT_ERROR ("(= 'a 'a)", q_error_type);
+  EXPECT_ERROR ("(= 1 \"a\")", q_error_type);
+  EXPECT_ERROR ("(= \"a\" 1.5)", q_error_type);
+  EXPECT_ERROR ("(= 1.5 'a)", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 
