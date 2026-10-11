@@ -528,37 +528,37 @@ f_divide (int argc, Lisp_Object *argv)
 Lisp_Object
 f_ge (Lisp_Object x, Lisp_Object y)
 {
-  check_type (x, LISP_INTG);
-  check_type (y, LISP_INTG);
+  if (intp (x) && intp (y))
+    return BOOL (unbox_int (x) > unbox_int (y));
 
-  return BOOL (unbox_int (x) > unbox_int (y));
+  return BOOL (to_float (x) > to_float (y));
 }
 
 Lisp_Object
 f_geq (Lisp_Object x, Lisp_Object y)
 {
-  check_type (x, LISP_INTG);
-  check_type (y, LISP_INTG);
+  if (intp (x) && intp (y))
+    return BOOL (unbox_int (x) >= unbox_int (y));
 
-  return BOOL (unbox_int (x) >= unbox_int (y));
+  return BOOL (to_float (x) >= to_float (y));
 }
 
 Lisp_Object
 f_le (Lisp_Object x, Lisp_Object y)
 {
-  check_type (x, LISP_INTG);
-  check_type (y, LISP_INTG);
+  if (intp (x) && intp (y))
+    return BOOL (unbox_int (x) < unbox_int (y));
 
-  return BOOL (unbox_int (x) < unbox_int (y));
+  return BOOL (to_float (x) < to_float (y));
 }
 
 Lisp_Object
 f_leq (Lisp_Object x, Lisp_Object y)
 {
-  check_type (x, LISP_INTG);
-  check_type (y, LISP_INTG);
+  if (intp (x) && intp (y))
+    return BOOL (unbox_int (x) <= unbox_int (y));
 
-  return BOOL (unbox_int (x) <= unbox_int (y));
+  return BOOL (to_float (x) <= to_float (y));
 }
 
 Lisp_Object

@@ -528,6 +528,43 @@ test_builtins_compare ()
   EXPECT_FORM ("(<= 2 2)", "t");
   EXPECT_FORM ("(<= 3 2)", "nil");
   EXPECT_ERROR ("(< 1 \"a\")", q_error_type);
+  // floats
+  EXPECT_FORM ("(> 2.5 1.5)", "t");
+  EXPECT_FORM ("(> 1.5 1.5)", "nil");
+  EXPECT_FORM ("(>= 1.5 1.5)", "t");
+  EXPECT_FORM ("(>= 0.5 1.5)", "nil");
+  EXPECT_FORM ("(< 0.25 0.5)", "t");
+  EXPECT_FORM ("(< 0.5 0.5)", "nil");
+  EXPECT_FORM ("(<= 0.5 0.5)", "t");
+  EXPECT_FORM ("(<= 0.75 0.5)", "nil");
+  // mixed int and float, in both argument orders
+  EXPECT_FORM ("(> 2 1.5)", "t");
+  EXPECT_FORM ("(> 1.5 2)", "nil");
+  EXPECT_FORM ("(>= 2.5 2)", "t");
+  EXPECT_FORM ("(>= 1 1.5)", "nil");
+  EXPECT_FORM ("(< 1 1.5)", "t");
+  EXPECT_FORM ("(< 2.5 2)", "nil");
+  EXPECT_FORM ("(<= 1.5 2)", "t");
+  EXPECT_FORM ("(<= 2 1.5)", "nil");
+  // an int and a float with the same value are equal
+  EXPECT_FORM ("(> 1 1.0)", "nil");
+  EXPECT_FORM ("(> 1.0 1)", "nil");
+  EXPECT_FORM ("(>= 1 1.0)", "t");
+  EXPECT_FORM ("(>= 1.0 1)", "t");
+  EXPECT_FORM ("(< 1 1.0)", "nil");
+  EXPECT_FORM ("(< 1.0 1)", "nil");
+  EXPECT_FORM ("(<= 1 1.0)", "t");
+  EXPECT_FORM ("(<= 1.0 1)", "t");
+  // negatives (there are no negative literals, so they are built with -)
+  EXPECT_FORM ("(< (- 1.5) 1)", "t");
+  EXPECT_FORM ("(> (- 1) (- 1.5))", "t");
+  EXPECT_FORM ("(<= (- 0.5) 0)", "t");
+  EXPECT_FORM ("(>= (- 2) (- 1.5))", "nil");
+  // type errors with floats, on either argument
+  EXPECT_ERROR ("(> 1.5 \"a\")", q_error_type);
+  EXPECT_ERROR ("(>= \"a\" 1.5)", q_error_type);
+  EXPECT_ERROR ("(< 1.5 \"a\")", q_error_type);
+  EXPECT_ERROR ("(<= \"a\" 1)", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 
