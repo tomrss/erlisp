@@ -78,12 +78,25 @@ typedef enum
   LISP_FLOT = IMMDTYPEBASE + LISP_TAG_FLOT,
   // complex types
   LISP_VECT = IMMDTYPEBASE + (1 << IMMDSUBTAGBITS),
+  LISP_PORT,
 } Lisp_Type;
+
+typedef enum
+{
+  PORT_IN,
+  PORT_OUT,
+} Lisp_Port_Direction;
+
+typedef enum
+{
+  PORT_FILE,
+  PORT_STRING,
+} Lisp_Port_Type;
 
 // TODO use GMP for arbitrary big integers
 typedef int64_t Lisp_Integer;
 // TODO box a double in some way (reduce the exponent?)
-typedef float Lisp_Float; 
+typedef float Lisp_Float;
 // TODO use 32 bit integer and handle utf8 and whathever
 typedef unsigned char Lisp_Char;
 typedef struct lisp_string Lisp_String;
@@ -92,6 +105,7 @@ typedef struct lisp_cons Lisp_Cons;
 typedef struct lisp_subr Lisp_Subr;
 typedef struct lisp_lambda Lisp_Lambda;
 typedef struct lisp_vector Lisp_Vector;
+typedef struct lisp_port Lisp_Port;
 
 typedef Lisp_Object (*lisp_subr_fun_0) (void);
 typedef Lisp_Object (*lisp_subr_fun_1) (Lisp_Object arg1);
@@ -191,6 +205,28 @@ struct lisp_vector
   Lisp_Object contents[];
 };
 
+struct lisp_port
+{
+  struct lisp_cplx_header header;
+  Lisp_Port_Direction direction;
+  Lisp_Port_Type type;
+  union
+  {
+    FILE *file;
+    struct
+    {
+      char *data;
+      size_t size;
+      size_t pos;
+    } string;
+  } backend;
+  Lisp_Object current;
+  int closed;
+  int (*get_char) (struct lisp_port *p);
+  int (*put_char) (int c, struct lisp_port *p);
+  int (*close) (struct lisp_port *p);
+};
+
 /* Conversion from/to boxed Lisp_Object to/from explicit types */
 
 static inline void *
@@ -260,6 +296,18 @@ unbox_vector (Lisp_Object v)
 }
 
 static inline Lisp_Object
+box_port (Lisp_Port *s)
+{
+  return ((uint64_t)s) | LISP_TAG_CPLX;
+}
+
+static inline Lisp_Port *
+unbox_port (Lisp_Object v)
+{
+  return (Lisp_Port *)unbox_pointer (v);
+}
+
+static inline Lisp_Object
 box_subr (Lisp_Subr *s)
 {
   return ((uint64_t)s) | LISP_SUBR;
@@ -313,7 +361,6 @@ unbox_float (Lisp_Object v)
   memcpy (&f, &bits, sizeof f);
   return f;
 }
-
 
 /* Type checking */
 
@@ -380,6 +427,8 @@ type_name (Lisp_Type t)
       return "FLOT";
     case LISP_CHAR:
       return "CHAR";
+    case LISP_PORT:
+      return "PORT";
     }
   return "UNKN";
 }
@@ -453,22 +502,43 @@ Lisp_Object f_intern (Lisp_Object name);
 Lisp_Object f_gc (Lisp_Object printmemstats);
 Lisp_Object f_memstats ();
 Lisp_Object f_memdump ();
+Lisp_Object f_input_port_p (Lisp_Object o);
+Lisp_Object f_output_port_p (Lisp_Object o);
+Lisp_Object f_eof_object_p (Lisp_Object o);
+Lisp_Object f_current_input_port ();
+Lisp_Object f_current_output_port ();
+Lisp_Object f_open_input_file (Lisp_Object path);
+Lisp_Object f_open_output_file (Lisp_Object path);
+Lisp_Object f_open_input_string (Lisp_Object string);
+Lisp_Object f_open_output_string ();
+Lisp_Object f_get_output_string (Lisp_Object port);
+Lisp_Object f_close_port (Lisp_Object port);
+Lisp_Object f_read_char (Lisp_Object port);
+Lisp_Object f_peek_char (Lisp_Object port);
+Lisp_Object f_char_ready_p (Lisp_Object port);
+Lisp_Object f_write_char (Lisp_Object c, Lisp_Object port);
+Lisp_Object f_flush_output_port (Lisp_Object port);
 
 extern Lisp_Object q_nil;
 extern Lisp_Object q_t;
 extern Lisp_Object q_unbound;
+extern Lisp_Object q_eof;
 extern Lisp_Object q_error;
 extern Lisp_Object q_error_arith;
 extern Lisp_Object q_error_file;
 extern Lisp_Object q_error_funcargs;
-extern Lisp_Object q_error_invalidfunc;
+extern Lisp_Object q_error_funcinvalid;
 extern Lisp_Object q_error_maxhandlerdepth;
+extern Lisp_Object q_error_portclosed;
+extern Lisp_Object q_error_portinvalid;
 extern Lisp_Object q_error_stackoverflow;
 extern Lisp_Object q_error_syntax;
 extern Lisp_Object q_error_type;
 extern Lisp_Object q_error_unbound;
 extern Lisp_Object q_error_unimplemented;
 extern Lisp_Object v_obarray;
+extern Lisp_Object p_current_input_port;
+extern Lisp_Object p_current_output_port;
 extern Lisp_Object l_globalenv;
 
 void init_builtins ();
@@ -503,8 +573,7 @@ static inline int
 floatp (Lisp_Object o)
 {
   // only the lowest subtag bit counts, see Lisp_Immd_Subtag
-  return tag_of (o) == LISP_TAG_IMMD
-         && ((o >> TAGBITS) & 1) == LISP_TAG_FLOT;
+  return tag_of (o) == LISP_TAG_IMMD && ((o >> TAGBITS) & 1) == LISP_TAG_FLOT;
 }
 
 static inline int
@@ -541,6 +610,12 @@ static inline int
 vectorp (Lisp_Object o)
 {
   return tag_of (o) == LISP_TAG_CPLX && complex_type_of (o) == LISP_VECT;
+}
+
+static inline int
+portp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_CPLX && complex_type_of (o) == LISP_PORT;
 }
 
 static inline int

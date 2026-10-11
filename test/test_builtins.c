@@ -123,6 +123,18 @@ static TestResult test_builtins_define_global ();
 static TestResult test_builtins_load_global ();
 static TestResult test_builtins_load_error ();
 static TestResult test_builtins_read ();
+static TestResult test_builtins_port_p ();
+static TestResult test_builtins_eof_object ();
+static TestResult test_builtins_input_string_port ();
+static TestResult test_builtins_peek_char ();
+static TestResult test_builtins_output_string_port ();
+static TestResult test_builtins_output_string_grow ();
+static TestResult test_builtins_port_direction ();
+static TestResult test_builtins_close_port ();
+static TestResult test_builtins_port_type_errors ();
+static TestResult test_builtins_file_port ();
+static TestResult test_builtins_current_port ();
+static TestResult test_builtins_port_gc ();
 
 static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "car cdr", .run = test_builtins_car_cdr },
@@ -172,6 +184,18 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "load global", .run = test_builtins_load_global },
   { .skip = 0, .name = "load error", .run = test_builtins_load_error },
   { .skip = 0, .name = "read", .run = test_builtins_read },
+  { .skip = 0, .name = "port?", .run = test_builtins_port_p },
+  { .skip = 0, .name = "eof-object?", .run = test_builtins_eof_object },
+  { .skip = 0, .name = "input str port", .run = test_builtins_input_string_port },
+  { .skip = 0, .name = "peek-char", .run = test_builtins_peek_char },
+  { .skip = 0, .name = "output str port", .run = test_builtins_output_string_port },
+  { .skip = 0, .name = "output str grow", .run = test_builtins_output_string_grow },
+  { .skip = 0, .name = "port direction", .run = test_builtins_port_direction },
+  { .skip = 0, .name = "close-port", .run = test_builtins_close_port },
+  { .skip = 0, .name = "port type err", .run = test_builtins_port_type_errors },
+  { .skip = 0, .name = "file port", .run = test_builtins_file_port },
+  { .skip = 0, .name = "current port", .run = test_builtins_current_port },
+  { .skip = 0, .name = "port gc", .run = test_builtins_port_gc },
   {}, // terminator
 };
 
@@ -889,5 +913,242 @@ test_builtins_read ()
   EXPECT_ERROR ("(read \"(1 2\")", q_error_syntax);
   EXPECT_ERROR ("(read \")\")", q_error_syntax);
   EXPECT_ERROR ("(read 1)", q_error_type);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_port_p ()
+{
+  EXPECT_FORM ("(input-port? (open-input-string \"a\"))", "t");
+  EXPECT_FORM ("(output-port? (open-input-string \"a\"))", "nil");
+  EXPECT_FORM ("(input-port? (open-output-string))", "nil");
+  EXPECT_FORM ("(output-port? (open-output-string))", "t");
+  // any object is accepted, no type error
+  EXPECT_FORM ("(input-port? 1)", "nil");
+  EXPECT_FORM ("(output-port? \"a\")", "nil");
+  EXPECT_FORM ("(input-port? nil)", "nil");
+  // ports evaluate to themselves
+  EXPECT_FORM ("(input-port? (eval (open-input-string \"a\")))", "t");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_eof_object ()
+{
+  EXPECT_FORM ("(eof-object? (read-char (open-input-string \"\")))", "t");
+  EXPECT_FORM ("(eof-object? (read-char (open-input-string \"a\")))", "nil");
+  EXPECT_FORM ("(eof-object? 1)", "nil");
+  EXPECT_FORM ("(eof-object? nil)", "nil");
+  // the eof object can't be built by naming it
+  EXPECT_FORM ("(eof-object? 'eof)", "nil");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_input_string_port ()
+{
+  EXPECT_NO_ERROR_SRC ("(define port-in (open-input-string \"ab\"))");
+  EXPECT_FORM ("(read-char port-in)", "?a");
+  EXPECT_FORM ("(read-char port-in)", "?b");
+  EXPECT_FORM ("(eof-object? (read-char port-in))", "t");
+  // eof is sticky
+  EXPECT_FORM ("(eof-object? (read-char port-in))", "t");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_peek_char ()
+{
+  EXPECT_NO_ERROR_SRC ("(define port-peek (open-input-string \"ab\"))");
+  // peek doesn't consume
+  EXPECT_FORM ("(peek-char port-peek)", "?a");
+  EXPECT_FORM ("(peek-char port-peek)", "?a");
+  EXPECT_FORM ("(read-char port-peek)", "?a");
+  EXPECT_FORM ("(read-char port-peek)", "?b");
+  // peek at the end gives eof, and so does the following read
+  EXPECT_FORM ("(eof-object? (peek-char port-peek))", "t");
+  EXPECT_FORM ("(eof-object? (read-char port-peek))", "t");
+  // a char returned by peek is not lost when read later
+  EXPECT_NO_ERROR_SRC ("(define port-peek2 (open-input-string \"xy\"))");
+  EXPECT_FORM ("(progn (peek-char port-peek2) (read-char port-peek2))", "?x");
+  EXPECT_FORM ("(read-char port-peek2)", "?y");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_output_string_port ()
+{
+  EXPECT_FORM ("(get-output-string (open-output-string))", "\"\"");
+  EXPECT_NO_ERROR_SRC ("(define port-out (open-output-string))");
+  EXPECT_NO_ERROR_SRC ("(write-char ?a port-out)");
+  EXPECT_NO_ERROR_SRC ("(write-char ?b port-out)");
+  EXPECT_FORM ("(get-output-string port-out)", "\"ab\"");
+  // get-output-string doesn't reset the port, writes keep accumulating
+  EXPECT_NO_ERROR_SRC ("(write-char ?c port-out)");
+  EXPECT_FORM ("(get-output-string port-out)", "\"abc\"");
+  // the returned string is a copy
+  EXPECT_NO_ERROR_SRC ("(define port-out-s (get-output-string port-out))");
+  EXPECT_NO_ERROR_SRC ("(write-char ?d port-out)");
+  EXPECT_FORM ("port-out-s", "\"abc\"");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_output_string_grow ()
+{
+  // writes 2^n chars with recursion depth n, to go past the initial buffer
+  EXPECT_NO_ERROR_SRC (
+      "(define port-fill (lambda (p n)"
+      "  (if (eq? n 0) (write-char ?x p)"
+      "    (port-fill p (- n 1)) (port-fill p (- n 1)))))");
+  EXPECT_NO_ERROR_SRC ("(define port-big (open-output-string))");
+  EXPECT_NO_ERROR_SRC ("(port-fill port-big 11)");
+  EXPECT_INT ("(string-length (get-output-string port-big))", 2048);
+  // what was written before the growth is still there
+  EXPECT_NO_ERROR_SRC ("(define port-big-in"
+                       "  (open-input-string (get-output-string port-big)))");
+  EXPECT_FORM ("(read-char port-big-in)", "?x");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_port_direction ()
+{
+  EXPECT_ERROR ("(read-char (open-output-string))", q_error_portinvalid);
+  EXPECT_ERROR ("(peek-char (open-output-string))", q_error_portinvalid);
+  EXPECT_ERROR ("(char-ready? (open-output-string))", q_error_portinvalid);
+  EXPECT_ERROR ("(write-char ?a (open-input-string \"\"))",
+                q_error_portinvalid);
+  EXPECT_ERROR ("(flush-output-port (open-input-string \"\"))",
+                q_error_portinvalid);
+  EXPECT_ERROR ("(get-output-string (open-input-string \"\"))",
+                q_error_portinvalid);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_close_port ()
+{
+  EXPECT_NO_ERROR_SRC ("(define port-cl-in (open-input-string \"ab\"))");
+  EXPECT_NO_ERROR_SRC ("(define port-cl-out (open-output-string))");
+  // closing twice is allowed, only the first time does something
+  EXPECT_FORM ("(close-port port-cl-in)", "t");
+  EXPECT_FORM ("(close-port port-cl-in)", "nil");
+  EXPECT_FORM ("(close-port port-cl-out)", "t");
+  // a closed port is still a port
+  EXPECT_FORM ("(input-port? port-cl-in)", "t");
+  EXPECT_ERROR ("(read-char port-cl-in)", q_error_portclosed);
+  EXPECT_ERROR ("(peek-char port-cl-in)", q_error_portclosed);
+  EXPECT_ERROR ("(char-ready? port-cl-in)", q_error_portclosed);
+  EXPECT_ERROR ("(write-char ?a port-cl-out)", q_error_portclosed);
+  EXPECT_ERROR ("(flush-output-port port-cl-out)", q_error_portclosed);
+  EXPECT_ERROR ("(get-output-string port-cl-out)", q_error_portclosed);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_port_type_errors ()
+{
+  EXPECT_ERROR ("(open-input-string 1)", q_error_type);
+  EXPECT_ERROR ("(open-input-file 1)", q_error_type);
+  EXPECT_ERROR ("(open-output-file 'a)", q_error_type);
+  EXPECT_ERROR ("(read-char 1)", q_error_type);
+  EXPECT_ERROR ("(peek-char \"a\")", q_error_type);
+  EXPECT_ERROR ("(char-ready? 1)", q_error_type);
+  EXPECT_ERROR ("(write-char ?a 1)", q_error_type);
+  EXPECT_ERROR ("(write-char 42 (open-output-string))", q_error_type);
+  EXPECT_ERROR ("(write-char \"a\" (open-output-string))", q_error_type);
+  EXPECT_ERROR ("(flush-output-port 1)", q_error_type);
+  EXPECT_ERROR ("(get-output-string 1)", q_error_type);
+  EXPECT_ERROR ("(close-port 1)", q_error_type);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_file_port ()
+{
+  EXPECT_ERROR ("(open-input-file \"test/assets/does-not-exist\")",
+                q_error_file);
+  // a directory can't be opened for writing
+  EXPECT_ERROR ("(open-output-file \"test/assets\")", q_error_file);
+
+  // obj/ is created by the build and ignored by git
+  EXPECT_NO_ERROR_SRC (
+      "(define port-fout (open-output-file \"obj/test-port.txt\"))");
+  EXPECT_FORM ("(output-port? port-fout)", "t");
+  EXPECT_NO_ERROR_SRC ("(write-char ?h port-fout)");
+  EXPECT_NO_ERROR_SRC ("(write-char ?i port-fout)");
+  EXPECT_FORM ("(flush-output-port port-fout)", "nil");
+  EXPECT_FORM ("(close-port port-fout)", "t");
+
+  EXPECT_NO_ERROR_SRC (
+      "(define port-fin (open-input-file \"obj/test-port.txt\"))");
+  EXPECT_FORM ("(input-port? port-fin)", "t");
+  EXPECT_FORM ("(peek-char port-fin)", "?h");
+  EXPECT_FORM ("(read-char port-fin)", "?h");
+  EXPECT_FORM ("(read-char port-fin)", "?i");
+  EXPECT_FORM ("(eof-object? (read-char port-fin))", "t");
+  EXPECT_FORM ("(close-port port-fin)", "t");
+
+  // opening for writing truncates
+  EXPECT_NO_ERROR_SRC ("(close-port (open-output-file \"obj/test-port.txt\"))");
+  EXPECT_NO_ERROR_SRC (
+      "(define port-fin2 (open-input-file \"obj/test-port.txt\"))");
+  EXPECT_FORM ("(eof-object? (read-char port-fin2))", "t");
+  EXPECT_NO_ERROR_SRC ("(close-port port-fin2)");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_current_port ()
+{
+  EXPECT_FORM ("(input-port? (current-input-port))", "t");
+  EXPECT_FORM ("(output-port? (current-output-port))", "t");
+  EXPECT_FORM ("(eq? (current-output-port) (current-output-port))", "t");
+  // without a port argument the current port is used. read-char and
+  // write-char are not tested this way: they would block on stdin or
+  // print in the middle of the test output
+  EXPECT_FORM ("(char-ready?)", "t");
+  EXPECT_FORM ("(flush-output-port)", "nil");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_port_gc ()
+{
+  // a port reachable from a variable survives a gc, with its state
+  EXPECT_NO_ERROR_SRC ("(define port-gc (open-input-string \"ab\"))");
+  EXPECT_FORM ("(read-char port-gc)", "?a");
+  EXPECT_NO_ERROR_SRC ("(gc)");
+  EXPECT_FORM ("(read-char port-gc)", "?b");
+
+  // the peeked char survives too
+  EXPECT_NO_ERROR_SRC ("(define port-gc2 (open-input-string \"xy\"))");
+  EXPECT_FORM ("(peek-char port-gc2)", "?x");
+  EXPECT_NO_ERROR_SRC ("(gc)");
+  EXPECT_FORM ("(read-char port-gc2)", "?x");
+
+  // the source string of an input port can be collected, the port must
+  // still read it
+  EXPECT_NO_ERROR_SRC (
+      "(define port-gc3 (open-input-string (concat \"q\" \"r\")))");
+  EXPECT_NO_ERROR_SRC ("(gc)");
+  EXPECT_FORM ("(read-char port-gc3)", "?q");
+  EXPECT_FORM ("(read-char port-gc3)", "?r");
+
+  // the current ports are gc roots: if they were collected, a new port
+  // could take their place
+  EXPECT_NO_ERROR_SRC ("(gc)");
+  EXPECT_NO_ERROR_SRC ("(open-input-string \"z\")");
+  EXPECT_NO_ERROR_SRC ("(open-output-string)");
+  EXPECT_FORM ("(input-port? (current-input-port))", "t");
+  EXPECT_FORM ("(output-port? (current-output-port))", "t");
+
+  // the eof object is a gc root: if it was collected, a new symbol could
+  // take its place
+  EXPECT_NO_ERROR_SRC ("(gc)");
+  EXPECT_NO_ERROR_SRC ("(symbol \"port-gc-sym\")");
+  EXPECT_FORM ("(eof-object? (symbol \"port-gc-sym\"))", "nil");
+  EXPECT_FORM ("(eof-object? (read-char (open-input-string \"\")))", "t");
   return TEST_RESULT_SUCCESS;
 }

@@ -14,18 +14,23 @@
 Lisp_Object q_nil;
 Lisp_Object q_t;
 Lisp_Object q_unbound;
+Lisp_Object q_eof;
 Lisp_Object q_error;
 Lisp_Object q_error_arith;
 Lisp_Object q_error_file;
 Lisp_Object q_error_funcargs;
-Lisp_Object q_error_invalidfunc;
+Lisp_Object q_error_funcinvalid;
 Lisp_Object q_error_maxhandlerdepth;
+Lisp_Object q_error_portclosed;
+Lisp_Object q_error_portinvalid;
 Lisp_Object q_error_stackoverflow;
 Lisp_Object q_error_syntax;
 Lisp_Object q_error_type;
 Lisp_Object q_error_unbound;
 Lisp_Object q_error_unimplemented;
 Lisp_Object v_obarray;
+Lisp_Object p_current_input_port;
+Lisp_Object p_current_output_port;
 Lisp_Object l_globalenv;
 
 Lisp_Object *currentenv;
@@ -188,6 +193,8 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
     case LISP_SUBR:
       break;
     case LISP_LMBD:
+      break;
+    case LISP_PORT:
       break;
     }
   // TODO
@@ -790,9 +797,7 @@ f_load (Lisp_Object path)
 
   FILE *f = fopen (upath, "r");
   if (!f)
-    {
-      file_error (path);
-    }
+    file_error (path);
 
   Lexer *l = lex_init (stream_file (f));
 
@@ -897,18 +902,218 @@ f_memstats ()
   return q_nil;
 }
 
+static inline Lisp_Port *
+safe_unbox_optionl_in_port (Lisp_Object port)
+{
+  if (nil (port))
+    port = p_current_input_port;
+  else
+    check_type (port, LISP_PORT);
+  Lisp_Port *p = unbox_port (port);
+  if (p->direction != PORT_IN)
+    invalidportdir_error (port, PORT_IN);
+  return p;
+}
+
+static inline Lisp_Port *
+safe_unbox_optionl_out_port (Lisp_Object port)
+{
+  if (nil (port))
+    port = p_current_output_port;
+  else
+    check_type (port, LISP_PORT);
+  Lisp_Port *p = unbox_port (port);
+  if (p->direction != PORT_OUT)
+    invalidportdir_error (port, PORT_OUT);
+  return p;
+}
+
+Lisp_Object
+f_input_port_p (Lisp_Object o)
+{
+  if (!portp (o))
+    return q_nil;
+
+  return BOOL (unbox_port (o)->direction == PORT_IN);
+}
+
+Lisp_Object
+f_output_port_p (Lisp_Object o)
+{
+  if (!portp (o))
+    return q_nil;
+
+  return BOOL (unbox_port (o)->direction == PORT_OUT);
+}
+
+Lisp_Object
+f_eof_object_p (Lisp_Object o)
+{
+  return f_eq_p (o, q_eof);
+}
+
+Lisp_Object
+f_current_input_port ()
+{
+  return p_current_input_port;
+}
+
+Lisp_Object
+f_current_output_port ()
+{
+  return p_current_output_port;
+}
+
+Lisp_Object
+f_open_input_file (Lisp_Object path)
+{
+  check_type (path, LISP_STRG);
+  FILE *f = fopen (unbox_string (path)->data, "r");
+  if (!f)
+    file_error (path);
+  return make_file_port (f, PORT_IN);
+}
+
+Lisp_Object
+f_open_output_file (Lisp_Object path)
+{
+  check_type (path, LISP_STRG);
+  FILE *f = fopen (unbox_string (path)->data, "w");
+  if (!f)
+    file_error (path);
+  return make_file_port (f, PORT_OUT);
+}
+
+Lisp_Object
+f_open_input_string (Lisp_Object string)
+{
+  check_type (string, LISP_STRG);
+  return make_input_string_port (string);
+}
+
+Lisp_Object
+f_open_output_string ()
+{
+  return make_output_string_port ();
+}
+
+Lisp_Object
+f_get_output_string (Lisp_Object port)
+{
+  check_type (port, LISP_PORT);
+  Lisp_Port *p = unbox_port (port);
+  if (p->type != PORT_STRING)
+    invalidporttype_error (port, PORT_STRING);
+  if (p->direction != PORT_OUT)
+    invalidportdir_error (port, PORT_OUT);
+  if (p->closed)
+    closedport_error (port);
+
+  // this will copy the buf
+  return make_nstring (p->backend.string.data, p->backend.string.pos);
+}
+
+Lisp_Object
+f_close_port (Lisp_Object port)
+{
+  check_type (port, LISP_PORT);
+  Lisp_Port *p = unbox_port (port);
+  return BOOL (p->close (p));
+}
+
+Lisp_Object
+f_read_char (Lisp_Object port)
+{
+  Lisp_Port *p = safe_unbox_optionl_in_port (port);
+  if (p->closed)
+    closedport_error (port);
+
+  if (!nil (p->current))
+    {
+      Lisp_Object res = p->current;
+      p->current = q_nil;
+      return res;
+    }
+
+  int c = p->get_char (p);
+  if (c == EOF)
+    return q_eof;
+  return box_char ((unsigned char)c);
+}
+
+Lisp_Object
+f_peek_char (Lisp_Object port)
+{
+  Lisp_Port *p = safe_unbox_optionl_in_port (port);
+  if (p->closed)
+    closedport_error (port);
+
+  if (!nil (p->current))
+    return p->current;
+
+  Lisp_Object res;
+  int c = p->get_char (p);
+  if (c == EOF)
+    res = q_eof;
+  else
+    res = box_char ((unsigned char)c);
+  p->current = res;
+  return res;
+}
+
+Lisp_Object
+f_char_ready_p (Lisp_Object port)
+{
+  Lisp_Port *p = safe_unbox_optionl_in_port (port);
+  if (p->closed)
+    closedport_error (port);
+
+  // TODO this will not be the case when we add sockets
+  return q_t;
+}
+
+Lisp_Object
+f_write_char (Lisp_Object c, Lisp_Object port)
+{
+  check_type (c, LISP_CHAR);
+  Lisp_Port *p = safe_unbox_optionl_out_port (port);
+  if (p->closed)
+    closedport_error (port);
+
+  int w = p->put_char (unbox_char (c), p);
+  if (w == EOF)
+    // TODO this is not a file error
+    file_error (make_string ("error writing to output port"));
+  return box_char ((unsigned char)w);
+}
+
+Lisp_Object
+f_flush_output_port (Lisp_Object port)
+{
+  Lisp_Port *p = safe_unbox_optionl_out_port (port);
+  if (p->closed)
+    closedport_error (port);
+
+  if (p->type == PORT_FILE)
+    fflush (p->backend.file);
+  return q_nil;
+}
+
 void
 init_builtins ()
 {
-  q_unbound = make_nstr_symbol ("unbound", 7);
   q_nil = make_nstr_symbol ("nil", 3);
   q_t = make_nstr_symbol ("t", 1);
+  q_unbound = make_nstr_symbol ("unbound", 7);
+  q_eof = make_nstr_symbol ("eof", 3);
   q_error = make_nstr_symbol ("error", 5);
   q_error_arith = make_str_symbol ("arith-error");
   q_error_file = make_str_symbol ("file-error");
   q_error_funcargs = make_str_symbol ("func-args-error");
-  q_error_invalidfunc = make_str_symbol ("invalid-func-error");
+  q_error_funcinvalid = make_str_symbol ("invalid-func-error");
   q_error_maxhandlerdepth = make_str_symbol ("max-handler-depth-error");
+  q_error_portclosed = make_str_symbol ("port-closed-error");
+  q_error_portinvalid = make_str_symbol ("port-invalid-error");
   q_error_stackoverflow = make_str_symbol ("stack-overflow-error");
   q_error_syntax = make_str_symbol ("syntax-error");
   q_error_type = make_str_symbol ("type-error");
@@ -917,6 +1122,9 @@ init_builtins ()
 
   v_obarray = obarray_init ();
   obarray_register_builtins (v_obarray);
+
+  p_current_input_port = make_file_port (stdin, PORT_IN);
+  p_current_output_port = make_file_port (stdout, PORT_OUT);
 
   l_globalenv = env_new (q_nil);
   stack_init (l_globalenv);
@@ -929,12 +1137,14 @@ obarray_register_builtins (Lisp_Object o)
 {
   obarray_put (o, q_nil);
   obarray_put (o, q_t);
-  obarray_put (o, q_unbound);
+  obarray_put (o, q_unbound); // TODO should not be interned
   obarray_put (o, q_error_arith);
   obarray_put (o, q_error_file);
   obarray_put (o, q_error_funcargs);
-  obarray_put (o, q_error_invalidfunc);
+  obarray_put (o, q_error_funcinvalid);
   obarray_put (o, q_error_maxhandlerdepth);
+  obarray_put (o, q_error_portclosed);
+  obarray_put (o, q_error_portinvalid);
   obarray_put (o, q_error_stackoverflow);
   obarray_put (o, q_error_syntax);
   obarray_put (o, q_error_type);
@@ -1008,6 +1218,23 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("gc", 0, 1, f_gc));
   obarray_put (o, DEFSUBR ("memstats", 0, 0, f_memstats));
   obarray_put (o, DEFSUBR ("memdump", 0, 0, f_memdump));
+  obarray_put (o, DEFSUBR ("input-port?", 1, 1, f_input_port_p));
+  obarray_put (o, DEFSUBR ("output-port?", 1, 1, f_output_port_p));
+  obarray_put (o, DEFSUBR ("eof-object?", 1, 1, f_eof_object_p));
+  obarray_put (o, DEFSUBR ("current-input-port", 0, 0, f_current_input_port));
+  obarray_put (o,
+               DEFSUBR ("current-output-port", 0, 0, f_current_output_port));
+  obarray_put (o, DEFSUBR ("open-input-file", 1, 1, f_open_input_file));
+  obarray_put (o, DEFSUBR ("open-output-file", 1, 1, f_open_output_file));
+  obarray_put (o, DEFSUBR ("open-input-string", 1, 1, f_open_input_string));
+  obarray_put (o, DEFSUBR ("open-output-string", 0, 0, f_open_output_string));
+  obarray_put (o, DEFSUBR ("get-output-string", 1, 1, f_get_output_string));
+  obarray_put (o, DEFSUBR ("close-port", 1, 1, f_close_port));
+  obarray_put (o, DEFSUBR ("read-char", 0, 1, f_read_char));
+  obarray_put (o, DEFSUBR ("peek-char", 0, 1, f_peek_char));
+  obarray_put (o, DEFSUBR ("char-ready?", 0, 1, f_char_ready_p));
+  obarray_put (o, DEFSUBR ("write-char", 1, 2, f_write_char));
+  obarray_put (o, DEFSUBR ("flush-output-port", 0, 1, f_flush_output_port));
 }
 
 // helpers impl

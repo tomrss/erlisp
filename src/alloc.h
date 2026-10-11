@@ -16,6 +16,7 @@ struct heap
   blkallocator *smallstrings;
   blkallocator *smallvectors;
   blkallocator *smalllambdas;
+  blkallocator *ports;
 
   loballocator *lobs;
 
@@ -28,6 +29,7 @@ struct memstats
 {
   blkmemstats conses;
   blkmemstats symbols;
+  blkmemstats ports;
   blkmemstats smallstrings;
   blkmemstats smallvectors;
   blkmemstats smalllambdas;
@@ -42,11 +44,14 @@ Lisp_Object make_symbol (Lisp_Object name);
 Lisp_Object make_str_symbol (const char *s);
 Lisp_Object make_nstr_symbol (const char *s, size_t size);
 Lisp_Object make_cons (Lisp_Object car, Lisp_Object cdr);
-Lisp_Object make_vector (size_t size);
 Lisp_Object make_subr (const char *name, int minargs, int maxargs,
                        union lisp_subr_fun fun);
 Lisp_Object make_lambda (int minargs, int maxargs, Lisp_Object env,
                          Lisp_Object *args, Lisp_Object form);
+Lisp_Object make_vector (size_t size);
+Lisp_Object make_file_port (FILE *f, Lisp_Port_Direction direction);
+Lisp_Object make_input_string_port (Lisp_Object string);
+Lisp_Object make_output_string_port ();
 Lisp_Object defsubr (const char *name, int minargs, int maxargs,
                      union lisp_subr_fun fun);
 

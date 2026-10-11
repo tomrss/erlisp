@@ -104,6 +104,12 @@ fprint_form (FILE *stream, Lisp_Object form)
     case LISP_VECT:
       fprintf (stream, "[size:%zu]", unbox_vector (form)->size);
       break;
+    case LISP_PORT:
+      fprintf (stream, "[port,%s,%s%s]",
+               unbox_port (form)->direction == PORT_IN ? "in" : "out",
+               unbox_port (form)->type == PORT_FILE ? "file" : "string",
+               unbox_port (form)->closed ? ",closed" : "");
+      break;
     case LISP_SUBR:
       fprintf (stream, "['%s',%d,%d]", unbox_subr (form)->name,
                unbox_subr (form)->minargs, unbox_subr (form)->maxargs);

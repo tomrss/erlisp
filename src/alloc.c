@@ -69,6 +69,7 @@ init_alloc ()
   heap = malloc (sizeof (struct heap));
   heap->conses = blkalloc_init (sizeof (Lisp_Cons));
   heap->symbols = blkalloc_init (sizeof (Lisp_Symbol));
+  heap->ports = blkalloc_init (sizeof (Lisp_Port));
   // variable-sized types: small objects will be padded in blocks of
   // fixed size. the block size is the size of a flexible array with N
   // elements
@@ -118,6 +119,128 @@ make_vector (size_t size)
     vec->contents[i] = q_nil;
 
   return box_vector (vec);
+}
+
+static inline Lisp_Port *
+make_uninit_port ()
+{
+  Lisp_Port *p = heapblkalloc (heap->ports);
+  p->header.type = LISP_PORT;
+  p->current = q_nil;
+  p->closed = 0;
+  return p;
+}
+
+static int
+file_port_get_char (Lisp_Port *p)
+{
+  return fgetc (p->backend.file);
+}
+
+static int
+string_port_get_char (Lisp_Port *p)
+{
+  if (p->backend.string.pos >= p->backend.string.size)
+    return EOF;
+  return (unsigned char)p->backend.string.data[p->backend.string.pos++];
+}
+
+static int
+file_port_put_char (int c, Lisp_Port *p)
+{
+  return fputc (c, p->backend.file);
+}
+
+static int
+string_port_put_char (int c, Lisp_Port *p)
+{
+  if (c == EOF)
+    return EOF;
+  if (p->backend.string.pos >= p->backend.string.size)
+    {
+      // not enough space, expand buffer
+      size_t incr = 1024; // TODO not here
+      p->backend.string.size += incr;
+      char *buf = realloc (p->backend.string.data, p->backend.string.size);
+      if (buf == NULL)
+        // todo this is bad!
+        f_signal (q_error, f_cons (make_string ("not enough memory"), q_nil));
+      p->backend.string.data = buf;
+    }
+
+  p->backend.string.data[p->backend.string.pos++] = c;
+  return c;
+}
+
+static int
+file_port_close (Lisp_Port *p)
+{
+  if (p->closed)
+    return 0;
+  fclose (p->backend.file);
+  p->closed = 1;
+  return 1;
+}
+
+static int
+string_port_close (Lisp_Port *p)
+{
+  if (p->closed)
+    return 0;
+  free (p->backend.string.data);
+  p->closed = 1;
+  return 1;
+}
+
+Lisp_Object
+make_file_port (FILE *f, Lisp_Port_Direction direction)
+{
+  Lisp_Port *p = make_uninit_port ();
+  p->direction = direction;
+  p->type = PORT_FILE;
+  p->backend.file = f;
+  p->get_char = &file_port_get_char;
+  p->put_char = &file_port_put_char;
+  p->close = &file_port_close;
+  return box_port (p);
+}
+
+Lisp_Object
+make_input_string_port (Lisp_Object string)
+{
+  Lisp_Port *p = make_uninit_port ();
+  p->direction = PORT_IN;
+  p->type = PORT_STRING;
+  // TODO this is tmp: we are copying but we shouldn't. Why? gc will
+  // free the input string.  probably the correct thing to do would be
+  // to keep the Lisp_Object string and gc mark it with the port.
+  p->backend.string.data = malloc (unbox_string (string)->size);
+  memcpy (p->backend.string.data, unbox_string (string)->data,
+          unbox_string (string)->size);
+
+  p->backend.string.size = unbox_string (string)->size;
+  p->backend.string.pos = 0;
+  p->get_char = &string_port_get_char;
+  p->put_char = &string_port_put_char;
+  p->close = &string_port_close;
+  return box_port (p);
+}
+
+Lisp_Object
+make_output_string_port ()
+{
+  size_t incr = 1024; // TODO not here
+
+  Lisp_Port *p = make_uninit_port ();
+  p->direction = PORT_OUT;
+  p->type = PORT_STRING;
+  p->backend.string.data = malloc (incr);
+  p->backend.string.size = incr;
+  p->backend.string.pos = 0;
+  p->get_char = &string_port_get_char;
+  p->put_char = &string_port_put_char;
+  p->close = &string_port_close;
+  return box_port (p);
 }
 
 Lisp_Object
@@ -329,6 +452,9 @@ gcmarkobj (Lisp_Object obj)
       for (size_t i = 0; i < unbox_vector (obj)->size; i++)
         gcmarkobj (unbox_vector (obj)->contents[i]);
       break;
+    case LISP_PORT:
+      blkgcmark (heap->ports, unbox_port (obj));
+      break;
     case LISP_INTG:
     case LISP_CHAR:
     case LISP_FLOT:
@@ -349,6 +475,13 @@ gcmarkstackframe (struct stackframe sf)
 static void
 gcmark ()
 {
+  // uninterned internal symbols are gc roots
+  gcmarkobj (q_eof);
+
+  // current ports are gc roots
+  gcmarkobj (p_current_input_port);
+  gcmarkobj (p_current_output_port);
+
   // code that is being evaluated in the stack is a gc root
   stack_walk (gcmarkstackframe);
 
@@ -372,9 +505,12 @@ gcmark ()
 static struct memstats
 gcsweep ()
 {
+  // TODO finalize unclosed ports
+
   // sweep fixed blk memory
   blkgcsweep (heap->conses);
   blkgcsweep (heap->symbols);
+  blkgcsweep (heap->ports);
   blkgcsweep (heap->smallstrings);
   blkgcsweep (heap->smallvectors);
   blkgcsweep (heap->smalllambdas);
@@ -427,8 +563,7 @@ print_memstats (struct memstats stats)
   print_blkmemstats ("small vectors", stats.smallvectors);
   print_blkmemstats ("small lambda", stats.smalllambdas);
   printf ("Large object heap:\n");
-  printf (" %lu objects (%zu B)\n", stats.loblength,
-          stats.lobsize);
+  printf (" %lu objects (%zu B)\n", stats.loblength, stats.lobsize);
 }
 
 void

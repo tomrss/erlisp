@@ -62,6 +62,7 @@ eval (Lisp_Object env, Lisp_Object form)
     case LISP_VECT:
     case LISP_SUBR:
     case LISP_LMBD:
+    case LISP_PORT:
       // eval to themself
       res = form;
       break;
