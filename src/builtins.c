@@ -378,72 +378,151 @@ f_length (Lisp_Object list)
   type_error_2 (list, LISP_CONS, LISP_STRG);
 }
 
+static inline Lisp_Float
+to_float (Lisp_Object num)
+{
+  if (intp (num))
+    return (Lisp_Float)unbox_int (num);
+  if (floatp (num))
+    return unbox_float (num);
+  type_error_2 (num, LISP_INTG, LISP_FLOT);
+}
+
+enum arith_op
+{
+  OP_SUM,
+  OP_SUB,
+  OP_MUL,
+  OP_DIV,
+};
+
+static inline Lisp_Integer
+int_op (enum arith_op op, Lisp_Integer a, Lisp_Integer b)
+{
+  switch (op)
+    {
+    case OP_SUM:
+      return a + b;
+    case OP_SUB:
+      return a - b;
+    case OP_MUL:
+      return a * b;
+    case OP_DIV:
+      if (b == 0)
+        arith_error ("division by zero");
+      return a / b;
+    }
+  internal_error ("arith op %d not implemented", op);
+}
+
+static inline Lisp_Float
+float_op (enum arith_op op, Lisp_Float a, Lisp_Float b)
+{
+  switch (op)
+    {
+    case OP_SUM:
+      return a + b;
+    case OP_SUB:
+      return a - b;
+    case OP_MUL:
+      return a * b;
+    case OP_DIV:
+      if (b == 0.f)
+        arith_error ("division by zero");
+      return a / b;
+    }
+  internal_error ("arith op %d not implemented", op);
+}
+
+static Lisp_Object
+arith_fold (enum arith_op op, int argc, Lisp_Object *argv)
+{
+  int i = 1;
+  Lisp_Integer iaccu;
+  Lisp_Float faccu;
+
+  if (intp (argv[0]))
+    {
+      // accumulate to integer until the first float
+      iaccu = unbox_int (argv[0]);
+      while (i < argc && intp (argv[i]))
+        {
+          iaccu = int_op (op, iaccu, unbox_int (argv[i]));
+          i++;
+        }
+      if (i == argc)
+        // there where no floats
+        return box_int (iaccu);
+      // from now on, we will be reasoning only on floats
+      faccu = (Lisp_Float)iaccu;
+    }
+  else
+    faccu = to_float (argv[0]);
+
+  while (i < argc)
+    {
+      faccu = float_op (op, faccu, to_float (argv[i]));
+      i++;
+    }
+
+  return box_float (faccu);
+}
+
 Lisp_Object
 f_sum (int argc, Lisp_Object *argv)
 {
-  Lisp_Integer accu = 0;
-  for (int i = 0; i < argc; i++)
-    {
-      // TODO only integers for now
-      check_type (argv[i], LISP_INTG);
-      accu += unbox_int (argv[i]);
-    }
-  return box_int (accu);
+  if (argc == 0)
+    return box_int (0);
+  return arith_fold (OP_SUM, argc, argv);
 }
 
 Lisp_Object
 f_subtract (int argc, Lisp_Object *argv)
 {
-  if (argc == 0)
-    return box_int (0);
-
-  check_type (argv[0], LISP_INTG);
-
+  // argc > 0 because of minargs is 1
   if (argc == 1)
-    return box_int (-unbox_int (argv[0]));
-
-  Lisp_Integer accu = unbox_int (argv[0]);
-  for (int i = 1; i < argc; i++)
     {
-      check_type (argv[i], LISP_INTG);
-      accu -= unbox_int (argv[i]);
+      if (intp (argv[0]))
+        return box_int (-unbox_int (argv[0]));
+      if (floatp (argv[0]))
+        return box_float (-unbox_float (argv[0]));
+      type_error_2 (argv[0], LISP_INTG, LISP_FLOT);
     }
-  return box_int (accu);
+
+  return arith_fold (OP_SUB, argc, argv);
 }
 
 Lisp_Object
 f_multiply (int argc, Lisp_Object *argv)
 {
-  Lisp_Integer accu = 1;
-  for (int i = 0; i < argc; i++)
-    {
-      check_type (argv[i], LISP_INTG);
-      accu *= unbox_int (argv[i]);
-    }
-  return box_int (accu);
+  if (argc == 0)
+    return box_int (1);
+
+  return arith_fold (OP_MUL, argc, argv);
 }
 
 Lisp_Object
 f_divide (int argc, Lisp_Object *argv)
 {
-  if (argc == 0)
-    return box_int (1);
-
-  check_type (argv[0], LISP_INTG);
-
+  // argc > 0 because of minargs is 1
   if (argc == 1)
-    return box_int (1 / unbox_int (argv[0]));
-
-  Lisp_Integer accu = unbox_int (argv[0]);
-  for (int i = 1; i < argc; i++)
     {
-      check_type (argv[i], LISP_INTG);
-      Lisp_Integer divider = unbox_int (argv[i]);
-      if (divider == 0)
-        arith_error ("division by zero");
-      accu /= divider;
+      if (intp (argv[0]))
+        {
+          if (unbox_int (argv[0]) == 0)
+            arith_error ("division by zero");
+          return box_int (1 / unbox_int (argv[0]));
+        }
+      if (floatp (argv[0]))
+        {
+          if (unbox_float (argv[0]) == 0.f)
+            arith_error ("division by zero");
+          return box_float (1.f / unbox_float (argv[0]));
+        }
+      type_error_2 (argv[0], LISP_INTG, LISP_FLOT);
     }
-  return box_int (accu);
+
+  return arith_fold (OP_DIV, argc, argv);
 }
 
 Lisp_Object

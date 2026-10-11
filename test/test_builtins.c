@@ -38,6 +38,19 @@ static const char *symname (Lisp_Object symbol);
     }                                                                         \
   while (0)
 
+// exact comparison: use values representable in a float (e.g. 0.5, 0.25)
+#define EXPECT_FLOAT(src, expected)                                           \
+  do                                                                          \
+    {                                                                         \
+      Lisp_Object _res;                                                       \
+      EXPECT_NO_ERROR (src, _res);                                            \
+      TEST_CHECK_TYPE (src, _res, LISP_FLOT);                                 \
+      TEST_ASSERT (unbox_float (_res) == (Lisp_Float)(expected),              \
+                   "%s: expected %f, got %f", src, (double)(expected),        \
+                   (double)unbox_float (_res));                               \
+    }                                                                         \
+  while (0)
+
 // expected is parsed but not evaluated
 #define EXPECT_FORM(src, expected)                                            \
   do                                                                          \
@@ -431,6 +444,14 @@ test_builtins_sum ()
   EXPECT_INT ("(+ 5)", 5);
   EXPECT_INT ("(+ 1 2 3)", 6);
   EXPECT_ERROR ("(+ 1 \"a\")", q_error_type);
+  // mixed: a single float makes the result a float
+  EXPECT_FLOAT ("(+ 1 2 1.5)", 4.5);
+  EXPECT_FLOAT ("(+ 1.5 2)", 3.5);
+  EXPECT_FLOAT ("(+ 0.25 1 0.25 2)", 3.5);
+  // floats summing to a whole number stay floats
+  EXPECT_FLOAT ("(+ 0.5 0.5)", 1.0);
+  EXPECT_FLOAT ("(+ 1.0)", 1.0);
+  EXPECT_ERROR ("(+ 1.5 \"a\")", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 
@@ -442,6 +463,14 @@ test_builtins_subtract ()
   // with a single argument it negates, as in scheme and emacs lisp
   EXPECT_INT ("(- 5)", -5);
   EXPECT_ERROR ("(- \"a\" 1)", q_error_type);
+  // mixed: a single float makes the result a float
+  EXPECT_FLOAT ("(- 10 2 1.5)", 6.5);
+  EXPECT_FLOAT ("(- 1.5 2)", -0.5);
+  EXPECT_FLOAT ("(- 0.25 1 0.25 2)", -3.0);
+  // floats summing to a whole number stay floats
+  EXPECT_FLOAT ("(- 0.5 0.5)", 0.f);
+  EXPECT_FLOAT ("(- 1.0)", -1.0);
+  EXPECT_ERROR ("(- 1.5 \"a\")", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 
@@ -452,6 +481,16 @@ test_builtins_multiply ()
   EXPECT_INT ("(* 2 3 4)", 24);
   EXPECT_INT ("(* 2 0)", 0);
   EXPECT_ERROR ("(* 2 \"a\")", q_error_type);
+  // mixed: a single float makes the result a float
+  EXPECT_FLOAT ("(* 2 3 1.5)", 9.0);
+  EXPECT_FLOAT ("(* 1.5 2)", 3.0);
+  EXPECT_FLOAT ("(* 0.5 4 0.25 2)", 1.0);
+  EXPECT_FLOAT ("(* 0.5 0.5)", 0.25);
+  // floats multiplying to a whole number stay floats
+  EXPECT_FLOAT ("(* 0.5 2)", 1.0);
+  EXPECT_FLOAT ("(* 0 1.5)", 0.0);
+  EXPECT_FLOAT ("(* 2.0)", 2.0);
+  EXPECT_ERROR ("(* 1.5 \"a\")", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 
@@ -462,6 +501,18 @@ test_builtins_divide ()
   EXPECT_INT ("(/ 7 2)", 3);
   EXPECT_ERROR ("(/ 1 0)", q_error_arith);
   EXPECT_ERROR ("(/ 1 \"a\")", q_error_type);
+  // mixed: a single float makes the result a float
+  EXPECT_FLOAT ("(/ 6 3 0.5)", 4.0);
+  EXPECT_FLOAT ("(/ 1.5 2)", 0.75);
+  EXPECT_FLOAT ("(/ 0.5 4 0.25 2)", 0.25);
+  EXPECT_FLOAT ("(/ 0.5 0.5)", 1.f);
+  // floats multiplying to a whole number stay floats
+  EXPECT_FLOAT ("(/ 0.5 2)", 0.25);
+  EXPECT_FLOAT ("(/ 0 1.5)", 0.0);
+  EXPECT_FLOAT ("(/ 2.0)", 0.5);
+  EXPECT_ERROR ("(/ 1.0 0.0)", q_error_arith);
+  EXPECT_ERROR ("(/ 1 0.0)", q_error_arith);
+  EXPECT_ERROR ("(/ 1.5 \"a\")", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 
