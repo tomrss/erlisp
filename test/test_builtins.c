@@ -104,6 +104,8 @@ static TestResult test_builtins_multiply ();
 static TestResult test_builtins_divide ();
 static TestResult test_builtins_compare ();
 static TestResult test_builtins_num_eq ();
+static TestResult test_builtins_min_max ();
+static TestResult test_builtins_abs ();
 static TestResult test_builtins_and ();
 static TestResult test_builtins_or ();
 static TestResult test_builtins_if ();
@@ -151,6 +153,8 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "/", .run = test_builtins_divide },
   { .skip = 0, .name = "> >= < <=", .run = test_builtins_compare },
   { .skip = 0, .name = "=", .run = test_builtins_num_eq },
+  { .skip = 0, .name = "min max", .run = test_builtins_min_max },
+  { .skip = 0, .name = "abs", .run = test_builtins_abs },
   { .skip = 0, .name = "and", .run = test_builtins_and },
   { .skip = 0, .name = "or", .run = test_builtins_or },
   { .skip = 0, .name = "if", .run = test_builtins_if },
@@ -625,6 +629,58 @@ test_builtins_num_eq ()
   EXPECT_ERROR ("(= 1 \"a\")", q_error_type);
   EXPECT_ERROR ("(= \"a\" 1.5)", q_error_type);
   EXPECT_ERROR ("(= 1.5 'a)", q_error_type);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_min_max ()
+{
+  EXPECT_INT ("(max 5)", 5);
+  EXPECT_INT ("(min 5)", 5);
+  EXPECT_INT ("(max 1 3 2)", 3);
+  EXPECT_INT ("(min 2 1 3)", 1);
+  EXPECT_INT ("(max 2 2)", 2);
+  EXPECT_INT ("(min 2 2)", 2);
+  EXPECT_INT ("(max (- 3) (- 1) (- 2))", -1);
+  EXPECT_INT ("(min (- 3) (- 1) (- 2))", -3);
+  EXPECT_FLOAT ("(max 1.5)", 1.5);
+  EXPECT_FLOAT ("(min 1.5)", 1.5);
+  EXPECT_FLOAT ("(max 0.5 1.5 0.25)", 1.5);
+  EXPECT_FLOAT ("(min 0.5 1.5 0.25)", 0.25);
+  // mixed: a single float makes the result a float, even when the winner
+  // is an int
+  EXPECT_FLOAT ("(max 1 2.5)", 2.5);
+  EXPECT_FLOAT ("(max 2.5 1)", 2.5);
+  EXPECT_FLOAT ("(max 3 2.5)", 3.0);
+  EXPECT_FLOAT ("(max 2.5 3)", 3.0);
+  EXPECT_FLOAT ("(min 1 2.5)", 1.0);
+  EXPECT_FLOAT ("(min 2.5 1)", 1.0);
+  EXPECT_FLOAT ("(min 3 2.5)", 2.5);
+  EXPECT_FLOAT ("(max 1 2 0.5 3)", 3.0);
+  EXPECT_FLOAT ("(min 1 2 0.5 3)", 0.5);
+  // only numbers are accepted, at any position
+  EXPECT_ERROR ("(max \"a\")", q_error_type);
+  EXPECT_ERROR ("(min 'a 1)", q_error_type);
+  EXPECT_ERROR ("(max 1 \"a\")", q_error_type);
+  EXPECT_ERROR ("(min 1.5 'a)", q_error_type);
+  EXPECT_ERROR ("(max 1 2.5 \"a\")", q_error_type);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_abs ()
+{
+  EXPECT_INT ("(abs 5)", 5);
+  EXPECT_INT ("(abs (- 5))", 5);
+  EXPECT_INT ("(abs 0)", 0);
+  EXPECT_FLOAT ("(abs 1.5)", 1.5);
+  EXPECT_FLOAT ("(abs (- 1.5))", 1.5);
+  EXPECT_FLOAT ("(abs 0.0)", 0.0);
+  // EXPECT_FLOAT uses == which can't tell 0.0 from -0.0: eqv? compares bits
+  EXPECT_FORM ("(eqv? (abs 0.0) 0.0)", "t");
+  EXPECT_FORM ("(eqv? (abs (- 0.0)) 0.0)", "t");
+  EXPECT_ERROR ("(abs \"a\")", q_error_type);
+  EXPECT_ERROR ("(abs 'a)", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 

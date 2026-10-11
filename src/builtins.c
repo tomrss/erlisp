@@ -401,6 +401,8 @@ enum arith_op
   OP_SUB,
   OP_MUL,
   OP_DIV,
+  OP_MIN,
+  OP_MAX,
 };
 
 static inline Lisp_Integer
@@ -418,6 +420,10 @@ int_op (enum arith_op op, Lisp_Integer a, Lisp_Integer b)
       if (b == 0)
         arith_error ("division by zero");
       return a / b;
+    case OP_MIN:
+      return a <= b ? a : b;
+    case OP_MAX:
+      return a >= b ? a : b;
     }
   internal_error ("arith op %d not implemented", op);
 }
@@ -437,6 +443,10 @@ float_op (enum arith_op op, Lisp_Float a, Lisp_Float b)
       if (b == 0.f)
         arith_error ("division by zero");
       return a / b;
+    case OP_MIN:
+      return a <= b ? a : b;
+    case OP_MAX:
+      return a >= b ? a : b;
     }
   internal_error ("arith op %d not implemented", op);
 }
@@ -530,6 +540,29 @@ f_divide (int argc, Lisp_Object *argv)
     }
 
   return arith_fold (OP_DIV, argc, argv);
+}
+
+Lisp_Object
+f_min (int argc, Lisp_Object *argv)
+{
+  return arith_fold (OP_MIN, argc, argv);
+}
+
+Lisp_Object
+f_max (int argc, Lisp_Object *argv)
+{
+  return arith_fold (OP_MAX, argc, argv);
+}
+
+Lisp_Object
+f_abs (Lisp_Object num)
+{
+  if (intp (num))
+    return unbox_int (num) >= 0 ? num : box_int (-unbox_int (num));
+  if (floatp (num))
+    // sign bit is top bit of the word, clear it
+    return num & ~((Lisp_Object)1 << (FLOTSHIFT + 31));
+  type_error_2 (num, LISP_INTG, LISP_FLOT);
 }
 
 Lisp_Object
@@ -945,6 +978,9 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("-", 1, MANY, f_subtract));
   obarray_put (o, DEFSUBR ("*", 0, MANY, f_multiply));
   obarray_put (o, DEFSUBR ("/", 1, MANY, f_divide));
+  obarray_put (o, DEFSUBR ("min", 1, MANY, f_min));
+  obarray_put (o, DEFSUBR ("max", 1, MANY, f_max));
+  obarray_put (o, DEFSUBR ("abs", 1, 1, f_abs));
   obarray_put (o, DEFSUBR ("=", 2, 2, f_num_eq));
   obarray_put (o, DEFSUBR (">", 2, 2, f_ge));
   obarray_put (o, DEFSUBR (">=", 2, 2, f_geq));
