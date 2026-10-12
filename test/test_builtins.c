@@ -124,6 +124,8 @@ static TestResult test_builtins_define_per_call ();
 static TestResult test_builtins_define_late ();
 static TestResult test_builtins_define_child_snapshot ();
 static TestResult test_builtins_define_global ();
+static TestResult test_builtins_define_short ();
+static TestResult test_builtins_define_short_error ();
 static TestResult test_builtins_load_global ();
 static TestResult test_builtins_load_error ();
 static TestResult test_builtins_read ();
@@ -195,6 +197,8 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "def late", .run = test_builtins_define_late },
   { .skip = 0, .name = "def child snap", .run = test_builtins_define_child_snapshot },
   { .skip = 0, .name = "def global", .run = test_builtins_define_global },
+  { .skip = 0, .name = "def short", .run = test_builtins_define_short },
+  { .skip = 0, .name = "def short error", .run = test_builtins_define_short_error },
   { .skip = 0, .name = "load global", .run = test_builtins_load_global },
   { .skip = 0, .name = "load error", .run = test_builtins_load_error },
   { .skip = 0, .name = "read", .run = test_builtins_read },
@@ -916,6 +920,42 @@ test_builtins_define_global ()
   EXPECT_INT ("(let ((def-glob-y 1)) def-glob)", 3);
   EXPECT_INT ("(let ((def-glob-y 1)) (define def-glob 4) def-glob)", 4);
   EXPECT_INT ("def-glob", 3);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_short ()
+{
+  // (define (f args) body) is the same as (define f (lambda (args) body))
+  EXPECT_NO_ERROR_SRC ("(define (def-sh-add a b) (+ a b))");
+  EXPECT_INT ("(def-sh-add 2 3)", 5);
+
+  // no args, body with more forms
+  EXPECT_NO_ERROR_SRC ("(define (def-sh-seq) 1 2 3)");
+  EXPECT_INT ("(def-sh-seq)", 3);
+
+  // recursion through the global name
+  EXPECT_NO_ERROR_SRC (
+      "(define (def-sh-count n) (if (eq? n 0) 0 (+ 1 (def-sh-count (- n 1)))))");
+  EXPECT_INT ("(def-sh-count 4)", 4);
+
+  // inner short define: local, and it captures the args of the call
+  EXPECT_NO_ERROR_SRC (
+      "(define (def-sh-outer x)"
+      "  (define (def-sh-inner y) (+ x y))"
+      "  (def-sh-inner 10))");
+  EXPECT_INT ("(def-sh-outer 1)", 11);
+  EXPECT_ERROR ("def-sh-inner", q_error_unbound);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_short_error ()
+{
+  // the name must be a symbol, in both forms
+  EXPECT_ERROR ("(define (1 x) x)", q_error_type);
+  EXPECT_ERROR ("(define ((def-sh-e a) b) b)", q_error_type);
+  EXPECT_ERROR ("(define 1 2)", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 

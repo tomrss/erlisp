@@ -361,18 +361,35 @@ Lisp_Object
 define (Lisp_Object env, Lisp_Object form)
 {
   Lisp_Object var = f_car (form);
-  check_type (var, LISP_SYMB);
-  Lisp_Object value = eval (env, f_car (f_cdr (form)));
+
+  Lisp_Object symbol;
+  Lisp_Object value;
+  if (symbolp (var))
+    {
+      symbol = var;
+      value = eval (env, f_car (f_cdr (form)));
+    }
+  else if (listp (var))
+    {
+      // this is the shortened form:
+      // (define (f arg) (body)) instead of (define f (lambda (arg) (body))) .
+      // once we have macroexpand, it will handle this cleanly
+      symbol = f_car (var);
+      check_type (symbol, LISP_SYMB);
+      value = f_lambda (f_cons (f_cdr (var), f_cdr (form)));
+    }
+  else
+    type_error_2 (var, LISP_SYMB, LISP_CONS);
 
   if (eq (env, l_globalenv))
     {
       // top level: define in global
-      unbox_symbol (var)->value = value;
+      unbox_symbol (symbol)->value = value;
     }
   else
     {
-      unbox_symbol (var)->localbound = 1;
-      env_define (env, var, value);
+      unbox_symbol (symbol)->localbound = 1;
+      env_define (env, symbol, value);
     }
 
   return value;
