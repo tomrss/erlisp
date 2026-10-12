@@ -144,6 +144,11 @@ static TestResult test_builtins_unwind_protect_error ();
 static TestResult test_builtins_unwind_protect_handler ();
 static TestResult test_builtins_unwind_protect_cleanup_error ();
 static TestResult test_builtins_unwind_protect_gc ();
+static TestResult test_builtins_condition_case ();
+static TestResult test_builtins_condition_case_rethrow ();
+static TestResult test_builtins_condition_case_unwind ();
+static TestResult test_builtins_condition_case_handlers ();
+static TestResult test_builtins_condition_case_gc ();
 
 static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "car cdr", .run = test_builtins_car_cdr },
@@ -210,6 +215,11 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "unw-prot handler", .run = test_builtins_unwind_protect_handler },
   { .skip = 0, .name = "unw-prot cleanup err", .run = test_builtins_unwind_protect_cleanup_error },
   { .skip = 0, .name = "unw-prot gc", .run = test_builtins_unwind_protect_gc },
+  { .skip = 0, .name = "cond-case", .run = test_builtins_condition_case },
+  { .skip = 0, .name = "cond-case rethrow", .run = test_builtins_condition_case_rethrow },
+  { .skip = 0, .name = "cond-case unwind", .run = test_builtins_condition_case_unwind },
+  { .skip = 0, .name = "cond-case handlers", .run = test_builtins_condition_case_handlers },
+  { .skip = 0, .name = "cond-case gc", .run = test_builtins_condition_case_gc },
   {}, // terminator
 };
 
@@ -1318,5 +1328,178 @@ test_builtins_unwind_protect_gc ()
   TEST_ASSERT (same_form (f_error_data (err), parse_src ("(3 . 4)")),
                "expected error data (3 . 4)");
   EXPECT_INT ("up-log", 2);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_condition_case ()
+{
+  // no error: the value is the body one, no handler runs
+  EXPECT_INT ("(condition-case (+ 40 2) (cc-boom 0))", 42);
+
+  // caught by symbol: the value is the handler one
+  EXPECT_FORM ("(condition-case (signal 'cc-boom) (cc-boom 'caught))",
+               "caught");
+
+  // the handler body is a progn
+  EXPECT_INT ("(condition-case (signal 'cc-boom) (cc-boom 1 2 3))", 3);
+
+  // the first matching clause wins, non matching ones are skipped
+  EXPECT_FORM ("(condition-case (signal 'cc-boom)"
+               "  (cc-other 'other)"
+               "  (cc-boom 'first)"
+               "  (cc-boom 'second))",
+               "first");
+
+  // t catches everything
+  EXPECT_FORM ("(condition-case (signal 'cc-boom) (cc-other 'other) (t 'all))",
+               "all");
+
+  // builtin errors are caught by their symbol
+  EXPECT_FORM ("(condition-case (car 1) (type-error 'type))", "type");
+  EXPECT_FORM ("(condition-case cc-unbound-var (unbound-error 'unbound))",
+               "unbound");
+
+  // the handler sees the locals of the condition-case env
+  EXPECT_INT ("(let ((x 5)) (condition-case (signal 'cc-boom) (cc-boom x)))",
+              5);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_condition_case_rethrow ()
+{
+  Lisp_Object boom = f_intern (make_string ("cc-boom"));
+  Lisp_Object boom2 = f_intern (make_string ("cc-boom2"));
+
+  // no matching clause: the error propagates unchanged
+  EXPECT_ERROR ("(condition-case (signal 'cc-boom) (cc-other 'other))", boom);
+
+  // and is caught by an outer condition-case
+  EXPECT_FORM ("(condition-case"
+               "  (condition-case (signal 'cc-boom) (cc-other 'inner))"
+               "  (cc-boom 'outer))",
+               "outer");
+
+  // the rethrown error keeps its data and its original backtrace: a rebuilt
+  // one would start from the condition-case frame
+  EXPECT_NO_ERROR_SRC ("(define cc-throw (lambda (a) (signal 'cc-boom a)))");
+  Lisp_Object err;
+  TEST_ASSERT (
+      !eval_src ("(condition-case (cc-throw (cons 3 4)) (cc-other 'other))",
+                 &err),
+      "expected cc-boom, got no error");
+  TEST_ASSERT (eq (f_error_symbol (err), boom), "expected cc-boom, got %s",
+               symname (f_error_symbol (err)));
+  TEST_ASSERT (same_form (f_error_data (err), parse_src ("(3 . 4)")),
+               "expected error data (3 . 4)");
+  Lisp_Object bt = f_error_backtrace (err);
+  TEST_ASSERT (same_form (f_car (bt), parse_src ("\"signal\""))
+                   && same_form (f_car (f_cdr (bt)), parse_src ("\"cc-throw\"")),
+               "expected backtrace starting with (\"signal\" \"cc-throw\")");
+
+  // an error in a handler is not caught by its own condition-case
+  EXPECT_ERROR ("(condition-case (signal 'cc-boom)"
+                "  (cc-boom (signal 'cc-boom2))"
+                "  (cc-boom2 'same))",
+                boom2);
+
+  // but by an outer one
+  EXPECT_FORM ("(condition-case"
+               "  (condition-case (signal 'cc-boom)"
+               "    (cc-boom (signal 'cc-boom2)))"
+               "  (cc-boom2 'outer))",
+               "outer");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_condition_case_unwind ()
+{
+  // the cleanups run before the handler
+  EXPECT_NO_ERROR_SRC ("(define cc-log nil)");
+  EXPECT_NO_ERROR_SRC ("(condition-case"
+                       "  (unwind-protect (signal 'cc-boom)"
+                       "    (set! cc-log (cons 'cleanup cc-log)))"
+                       "  (cc-boom (set! cc-log (cons 'handler cc-log))))");
+  EXPECT_FORM ("cc-log", "(handler cleanup)");
+
+  // rethrow: each cleanup runs once, the ones between the inner and the
+  // outer condition-case too
+  EXPECT_NO_ERROR_SRC ("(define cc-log nil)");
+  EXPECT_NO_ERROR_SRC (
+      "(condition-case"
+      "  (unwind-protect"
+      "    (condition-case"
+      "      (unwind-protect (signal 'cc-boom)"
+      "        (set! cc-log (cons 'inner cc-log)))"
+      "      (cc-other 'other))"
+      "    (set! cc-log (cons 'mid cc-log)))"
+      "  (cc-boom (set! cc-log (cons 'handler cc-log))))");
+  EXPECT_FORM ("cc-log", "(handler mid inner)");
+
+  // a caught error does not run the cleanups outside the condition-case
+  EXPECT_NO_ERROR_SRC ("(define cc-log nil)");
+  EXPECT_NO_ERROR_SRC (
+      "(unwind-protect"
+      "  (progn"
+      "    (condition-case (signal 'cc-boom) (cc-boom 'caught))"
+      "    (set! cc-log (cons 'after cc-log)))"
+      "  (set! cc-log (cons 'outer cc-log)))");
+  EXPECT_FORM ("cc-log", "(outer after)");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_condition_case_handlers ()
+{
+  // more than HANDLERSIZE sequential condition-cases: every exit path must
+  // pop its handler, or the handler stack overflows
+
+  // local exit
+  for (int i = 0; i < 600; i++)
+    EXPECT_INT ("(condition-case 1 (cc-boom 0))", 1);
+
+  // caught
+  for (int i = 0; i < 600; i++)
+    EXPECT_FORM ("(condition-case (signal 'cc-boom) (cc-boom 'ok))", "ok");
+
+  // rethrown
+  for (int i = 0; i < 600; i++)
+    EXPECT_FORM ("(condition-case"
+                 "  (condition-case (signal 'cc-boom) (cc-other 'inner))"
+                 "  (cc-boom 'ok))",
+                 "ok");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_condition_case_gc ()
+{
+  // the conses allocated after the gc try to reuse the blocks of what was
+  // wrongly freed
+
+  // rethrow: the error survives a gc in a cleanup between the inner and the
+  // outer handler
+  EXPECT_NO_ERROR_SRC ("(define cc-throw (lambda (a) (signal 'cc-boom a)))");
+  Lisp_Object err;
+  TEST_ASSERT (!eval_src ("(unwind-protect"
+                          "  (condition-case (cc-throw (cons 3 4))"
+                          "    (cc-other 'other))"
+                          "  (gc)"
+                          "  (cons (cons 0 0) (cons 0 0)))",
+                          &err),
+               "expected cc-boom, got no error");
+  TEST_ASSERT (eq (f_error_symbol (err), f_intern (make_string ("cc-boom"))),
+               "expected cc-boom, got %s", symname (f_error_symbol (err)));
+  TEST_ASSERT (same_form (f_error_data (err), parse_src ("(3 . 4)")),
+               "expected error data (3 . 4)");
+
+  // the clauses survive a gc in the body
+  EXPECT_FORM ("(condition-case"
+               "  (progn (gc) (cons (cons 0 0) (cons 0 0)) (signal 'cc-boom))"
+               "  (cc-other 'other)"
+               "  (cc-boom (car (cons 'ok nil))))",
+               "ok");
   return TEST_RESULT_SUCCESS;
 }

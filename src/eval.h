@@ -26,6 +26,7 @@ int condition_case_2 (Lisp_Object (*fun) (Lisp_Object, Lisp_Object),
                       Lisp_Object arg1, Lisp_Object arg2, Lisp_Object *out);
 int condition_case_n (Lisp_Object (*fun) (int, Lisp_Object *), int nargs,
                       Lisp_Object *args, Lisp_Object *out);
+Lisp_Object condition_case (Lisp_Object env, Lisp_Object form);
 
 int safe_eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out);
 

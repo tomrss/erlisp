@@ -462,6 +462,7 @@ Lisp_Object f_assoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_assq (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_rassoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_rassq (Lisp_Object key, Lisp_Object alist);
+Lisp_Object f_memq (Lisp_Object elt, Lisp_Object list);
 Lisp_Object f_string_equal_p (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_string_length (Lisp_Object string);
 Lisp_Object f_number_to_string (Lisp_Object number);
@@ -519,6 +520,7 @@ Lisp_Object f_char_ready_p (Lisp_Object port);
 Lisp_Object f_write_char (Lisp_Object c, Lisp_Object port);
 Lisp_Object f_flush_output_port (Lisp_Object port);
 Lisp_Object f_unwind_protect (Lisp_Object form);
+Lisp_Object f_condition_case (Lisp_Object form);
 
 extern Lisp_Object q_nil;
 extern Lisp_Object q_t;

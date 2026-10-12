@@ -156,6 +156,22 @@ f_rassq (Lisp_Object key, Lisp_Object alist)
 }
 
 Lisp_Object
+f_memq (Lisp_Object elt, Lisp_Object list)
+{
+  if (nil (list))
+    return q_nil;
+  check_type (list, LISP_CONS);
+  Lisp_Object tail = list;
+  while (!nil (tail))
+    {
+      if (eq (elt, f_car (tail)))
+        return tail;
+      tail = f_cdr (tail);
+    }
+  return q_nil;
+}
+
+Lisp_Object
 f_eq_p (Lisp_Object x, Lisp_Object y)
 {
   return eq (x, y) ? q_t : q_nil;
@@ -1105,6 +1121,12 @@ f_unwind_protect (Lisp_Object form)
   return unwind_protect (env_current (), form);
 }
 
+Lisp_Object
+f_condition_case (Lisp_Object form)
+{
+  return condition_case (env_current (), form);
+}
+
 void
 init_builtins ()
 {
@@ -1183,6 +1205,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("assq", 2, 2, f_assq));
   obarray_put (o, DEFSUBR ("rassoc", 2, 2, f_rassoc));
   obarray_put (o, DEFSUBR ("rassq", 2, 2, f_rassq));
+  obarray_put (o, DEFSUBR ("memq", 2, 2, f_memq));
   obarray_put (o, DEFSUBR ("string=?", 2, 2, f_string_equal_p));
   obarray_put (o, DEFSUBR ("string-length", 1, 1, f_string_length));
   obarray_put (o, DEFSUBR ("number->string", 1, 1, f_number_to_string));
@@ -1241,6 +1264,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("write-char", 1, 2, f_write_char));
   obarray_put (o, DEFSUBR ("flush-output-port", 0, 1, f_flush_output_port));
   obarray_put (o, DEFSUBR ("unwind-protect", 1, UNEVALLED, f_unwind_protect));
+  obarray_put (o, DEFSUBR ("condition-case", 1, UNEVALLED, f_condition_case));
 }
 
 // helpers impl

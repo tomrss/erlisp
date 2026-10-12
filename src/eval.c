@@ -419,42 +419,31 @@ make_error (Lisp_Object symbol, Lisp_Object data, Lisp_Object backtrace)
 }
 
 NORETURN void
-xsignal (Lisp_Object symbol, Lisp_Object data)
+xsignal_err (Lisp_Object err)
 {
   if (handlerdepth == 0)
     {
       // no handler: no setjmp, using longjmp would have undefined behaviour
-      print_error (make_error (symbol, data, q_nil));
+      print_error (err);
       exit (1);
     }
 
   struct handler *h = current_handler ();
+  h->error = err;
 
-  // NOTE: in a perfect world, we want to just signal the error and have a non
-  // local exit with longjmp. the setjmp "listener" to the error should have
-  // the duty to react to the error and do stuff, like stack unwinding,
-  // invoking handlers, unwind-protect cleanups, and everything. this should
-  // just save the error in the handler frame and jump.
-  // So why we do stuff here (error signaling) instead of condition_case (error
-  // reaction)?
-  // This is because when we do longjmp we throw away the C stack, where
-  // argvals are allocated (alloca). It does not seem right to malloc them in
-  // the C heap, but this means that in setjmp the stack frames from current
-  // depth to the depth of the handler are invalid, they contain unsafe argvals
-  // that are no more in the C stack.
-  // That's why is safe to unwind the Lisp stack here, and so every operation
-  // that requires the unwinded stack frames must be done here. The
-  // unwind-protect also must be done here for same reason (it requires
-  // unwinded stack frames). The condition-case handlers are managed in the
-  // proper handler (condition_case), that is correct.
-  // Not clean, but effective.
-
-  Lisp_Object backtrace = stack_backtrace (h->stackind);
-  h->error = make_error (symbol, data, backtrace);
-
+  // unwind and cleanup need to happen here: they need the stack
+  // frames from here till jump, which will die after jump
   stack_unwind (h->stackind, run_cleanups);
 
   longjmp (h->jmp, 1);
+}
+
+NORETURN void
+xsignal (Lisp_Object symbol, Lisp_Object data)
+{
+  Lisp_Object backtrace = stack_backtrace (1); // 1: exclude base frame
+  Lisp_Object error = make_error (symbol, data, backtrace);
+  xsignal_err (error);
 }
 
 int
@@ -540,4 +529,38 @@ int
 safe_eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out)
 {
   return condition_case_2 (eval, env, form, out);
+}
+
+Lisp_Object
+condition_case (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object body = f_car (form);
+  Lisp_Object conds = f_cdr (form);
+  Lisp_Object res;
+
+  if (safe_eval (env, body, &res))
+    return res;
+
+  Lisp_Object err = res;
+
+  while (!nil (conds))
+    {
+      Lisp_Object cond = f_car (conds);
+      Lisp_Object condsym = f_car (cond);
+
+      Lisp_Object errsym = f_car (err);
+
+      if (eq (condsym, q_t) ||    // catch all
+          eq (errsym, condsym) || // match single
+          (consp (condsym)
+           && !nil (f_memq (errsym, condsym)))) // match in list
+        {
+          Lisp_Object condbody = f_cdr (cond);
+          return progn (env, condbody);
+        }
+
+      conds = f_cdr (conds);
+    }
+
+  xsignal_err (err);
 }
