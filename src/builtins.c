@@ -1137,7 +1137,6 @@ obarray_register_builtins (Lisp_Object o)
 {
   obarray_put (o, q_nil);
   obarray_put (o, q_t);
-  obarray_put (o, q_unbound); // TODO should not be interned
   obarray_put (o, q_error_arith);
   obarray_put (o, q_error_file);
   obarray_put (o, q_error_funcargs);

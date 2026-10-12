@@ -477,6 +477,7 @@ gcmark ()
 {
   // uninterned internal symbols are gc roots
   gcmarkobj (q_eof);
+  gcmarkobj (q_unbound);
 
   // current ports are gc roots
   gcmarkobj (p_current_input_port);
