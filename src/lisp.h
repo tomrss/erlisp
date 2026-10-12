@@ -21,6 +21,9 @@
 #define MANY 999
 #define UNEVALLED 888
 
+// value of lisp_port current when nothing was peeked, must differ from EOF
+#define PORT_NOPEEK -2
+
 #define ERRTYPE(expected, got)                                                \
   fprintf (stderr, "type error. expected %s, got %s", type_name (expected),   \
            type_name (got));                                                  \
@@ -220,8 +223,8 @@ struct lisp_port
       size_t pos;
     } string;
   } backend;
-  Lisp_Object current;
-  int closed;
+  int current; // peeked char or EOF, PORT_NOPEEK if nothing was peeked
+  int closed;  // bool
   int (*get_char) (struct lisp_port *p);
   int (*put_char) (int c, struct lisp_port *p);
   int (*close) (struct lisp_port *p);
@@ -548,6 +551,12 @@ extern Lisp_Object p_current_output_port;
 extern Lisp_Object l_globalenv;
 
 void init_builtins ();
+
+// internal functions
+
+int port_read_char (Lisp_Port *p);
+int port_peek_char (Lisp_Port *p);
+int port_write_char (int c, Lisp_Port *p);
 
 // inlined helpers
 

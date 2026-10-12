@@ -138,7 +138,7 @@ make_uninit_port ()
 {
   Lisp_Port *p = heapblkalloc (heap->ports);
   p->header.type = LISP_PORT;
-  p->current = q_nil;
+  p->current = PORT_NOPEEK;
   p->closed = 0;
   return p;
 }

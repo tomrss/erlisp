@@ -1,4 +1,5 @@
 #include "test_lexer.h"
+#include "../src/alloc.h"
 #include "../src/lexer.h"
 #include "test_lib.h"
 #include <math.h>
@@ -16,6 +17,7 @@ static TestResult test_lexer_comments ();
 static TestResult test_lexer_unterminated_str ();
 static TestResult test_lexer_float ();
 static TestResult test_lexer_char ();
+static TestResult test_lexer_terminators ();
 
 static TestCase test_lexer_cases[] = {
   { .skip = 0, .name = "mix", .run = &test_lexer_mix },
@@ -24,6 +26,7 @@ static TestCase test_lexer_cases[] = {
   { .skip = 0, .name = "unterm-str", .run = &test_lexer_unterminated_str },
   { .skip = 0, .name = "float", .run = &test_lexer_float },
   { .skip = 0, .name = "char", .run = &test_lexer_char },
+  { .skip = 0, .name = "terminators", .run = &test_lexer_terminators },
   {}, // terminator
 };
 
@@ -48,10 +51,10 @@ static TestResult
 test_lexer_mix ()
 {
   FILE *f = fopen ("test/assets/src-mix.tl", "r");
-  Stream *s = stream_file (f);
-  Lexer *l = lex_init (s);
-  if (!l)
+  if (!f)
     return TEST_RESULT_FAIL ("test asset not found");
+  Lexer lex = lex_init (unbox_port (make_file_port (f, PORT_IN)));
+  Lexer *l = &lex;
 
   Token tok;
   TestResult res;
@@ -158,10 +161,10 @@ static TestResult
 test_lexer_comments ()
 {
   FILE *f = fopen ("test/assets/src-comments.tl", "r");
-  Stream *s = stream_file (f);
-  Lexer *l = lex_init (s);
-  if (!l)
+  if (!f)
     return TEST_RESULT_FAIL ("test asset not found");
+  Lexer lex = lex_init (unbox_port (make_file_port (f, PORT_IN)));
+  Lexer *l = &lex;
 
   Token tok;
   TestResult res;
@@ -203,10 +206,10 @@ static TestResult
 test_lexer_defer_eval ()
 {
   FILE *f = fopen ("test/assets/src-defer-eval.tl", "r");
-  Stream *s = stream_file (f);
-  Lexer *l = lex_init (s);
-  if (!l)
+  if (!f)
     return TEST_RESULT_FAIL ("test asset not found");
+  Lexer lex = lex_init (unbox_port (make_file_port (f, PORT_IN)));
+  Lexer *l = &lex;
 
   Token tok;
   TestResult res;
@@ -328,10 +331,10 @@ static TestResult
 test_lexer_unterminated_str ()
 {
   FILE *f = fopen ("test/assets/src-err-unterminated-string.tl", "r");
-  Stream *s = stream_file (f);
-  Lexer *l = lex_init (s);
-  if (!l)
+  if (!f)
     return TEST_RESULT_FAIL ("test asset not found");
+  Lexer lex = lex_init (unbox_port (make_file_port (f, PORT_IN)));
+  Lexer *l = &lex;
 
   Token tok;
   TestResult res;
@@ -369,7 +372,8 @@ static TestResult
 test_lexer_float ()
 {
   const char *src = "1.5 0.25 3. 42 (a . b)";
-  Lexer *l = lex_init (stream_string (src, strlen (src)));
+  Lexer lex = lex_init (unbox_port (make_input_string_port (make_string (src))));
+  Lexer *l = &lex;
   Token tok;
   TestResult res;
 
@@ -419,7 +423,6 @@ test_lexer_float ()
   if (!res.success)
     return res;
 
-  lex_close (l);
   return TEST_RESULT_SUCCESS;
 }
 
@@ -430,7 +433,8 @@ test_lexer_char ()
   const char *src = "?a ?( ?\\n ?\\s ?\\\\ ?\\( ?ab";
   int expected[] = { 'a', '(', '\n', ' ', '\\', '(' };
   int n = sizeof (expected) / sizeof (expected[0]);
-  Lexer *l = lex_init (stream_string (src, strlen (src)));
+  Lexer lex = lex_init (unbox_port (make_input_string_port (make_string (src))));
+  Lexer *l = &lex;
   Token tok;
   TestResult res;
 
@@ -446,16 +450,83 @@ test_lexer_char ()
   res = assert_tok_error (tok, "invalid character literal");
   if (!res.success)
     return res;
-  lex_close (l);
 
   // a lone ? at the end of input
   const char *unterm = "?";
-  l = lex_init (stream_string (unterm, strlen (unterm)));
+  lex = lex_init (unbox_port (make_input_string_port (make_string (unterm))));
   tok = lex_next (l);
   res = assert_tok_error (tok, "unterminated character literal");
   if (!res.success)
     return res;
-  lex_close (l);
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_lexer_terminators ()
+{
+  // the char ending a symbol or a number is not part of it and must
+  // stay in the port for the next token
+  const char *src = "(foo)(1 2)bar'x";
+  Lexer lex = lex_init (unbox_port (make_input_string_port (make_string (src))));
+  Lexer *l = &lex;
+  Token tok;
+  TestResult res;
+
+  tok = lex_next (l);
+  res = assert_tok_simple (tok, TOK_LPAREN);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_symbol (tok, "foo");
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_simple (tok, TOK_RPAREN);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_simple (tok, TOK_LPAREN);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_int_literal (tok, 1);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_int_literal (tok, 2);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_simple (tok, TOK_RPAREN);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_symbol (tok, "bar");
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_simple (tok, TOK_QUOTE);
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_symbol (tok, "x");
+  if (!res.success)
+    return res;
+
+  tok = lex_next (l);
+  res = assert_tok_simple (tok, TOK_EOF);
+  if (!res.success)
+    return res;
 
   return TEST_RESULT_SUCCESS;
 }

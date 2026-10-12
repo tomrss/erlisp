@@ -1,8 +1,8 @@
 #include "alloc.h"
-#include "print.h"
 #include "env.h"
 #include "eval.h"
 #include "lisp.h"
+#include "print.h"
 #include <stdio.h>
 #include <stdlib.h>
 #ifdef HAVE_READLINE
@@ -63,7 +63,8 @@ main (int argc, char **argv)
               free (line);
               break;
             }
-          if (condition_case_1 (read_eval, make_string (line), &res))
+          Lisp_Object port = f_open_input_string (make_string (line));
+          if (condition_case_1 (read_eval, port, &res))
             {
               print_form (res);
               printf ("\n");

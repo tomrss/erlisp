@@ -1,4 +1,5 @@
 #include "lexer.h"
+#include "lisp.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,50 +11,15 @@ static Token parse_string (Lexer *l);
 static Token parse_char (Lexer *l);
 static Token parse_comma (Lexer *l);
 static Token try_parse_symbol (Lexer *l, int firstchar);
-static int stream_file_getc (Stream *s);
-static int stream_file_ungetc (int c, Stream *s);
-static int stream_string_getc (Stream *s);
-static int stream_string_ungetc (int c, Stream *s);
 
-Stream *
-stream_file (FILE *file)
+Lexer
+lex_init (Lisp_Port *s)
 {
-  Stream *s = malloc (sizeof (Stream));
-  s->type = STREAM_FILE;
-  s->source.file = file;
-  s->getc_func = stream_file_getc;
-  s->ungetc_func = stream_file_ungetc;
-  return s;
-}
-
-Stream *
-stream_string (const char *string, size_t size)
-{
-  Stream *s = malloc (sizeof (Stream));
-  s->type = STREAM_STRING;
-  s->source.string.data = string;
-  s->source.string.size = size;
-  s->source.string.pos = 0;
-  s->getc_func = stream_string_getc;
-  s->ungetc_func = stream_string_ungetc;
-  return s;
-}
-
-void
-stream_close (Stream *s)
-{
-  free (s);
-}
-
-Lexer *
-lex_init (Stream *s)
-{
-  Lexer *l;
-  l = malloc (sizeof (Lexer));
-  l->line = 1;
-  l->token = (Token){};
-  l->stream = s;
-  return l;
+  return (Lexer){
+    .line = 1,
+    .token = (Token){},
+    .stream = s,
+  };
 }
 
 Token
@@ -63,7 +29,7 @@ lex_next (Lexer *l)
   int c;
   int line;
 
-  c = sgetc (l->stream);
+  c = port_read_char (l->stream);
 
   c = eat_spacing_and_comments (l, c);
   line = l->line;
@@ -96,33 +62,26 @@ lex_next (Lexer *l)
   return tok;
 }
 
-void
-lex_close (Lexer *l)
-{
-  stream_close (l->stream);
-  free (l);
-}
-
 static int
 eat_spacing_and_comments (Lexer *l, int firstchar)
 {
   if (firstchar == ';')
     {
       int c;
-      while ((c = sgetc (l->stream)) != EOF && c != '\n')
+      while ((c = port_read_char (l->stream)) != EOF && c != '\n')
         ;
       return eat_spacing_and_comments (l, c);
     }
 
   if (firstchar == ' ' || firstchar == '\t')
     {
-      return eat_spacing_and_comments (l, sgetc (l->stream));
+      return eat_spacing_and_comments (l, port_read_char (l->stream));
     }
 
   if (firstchar == '\n')
     {
       l->line++;
-      return eat_spacing_and_comments (l, sgetc (l->stream));
+      return eat_spacing_and_comments (l, port_read_char (l->stream));
     }
 
   return firstchar;
@@ -144,7 +103,7 @@ parse_number (Lexer *l, int firstchar)
   bufsize = 20;
   buf = malloc (bufsize);
 
-  do
+  while (1)
     {
       if (c == '.')
         is_float = 1;
@@ -161,12 +120,14 @@ parse_number (Lexer *l, int firstchar)
         }
 
       buf[pos++] = c;
+
+      c = port_peek_char (l->stream);
+      if (c == EOF || !(isdigit (c) || c == '.'))
+        break;
+      port_read_char (l->stream);
     }
-  while ((c = sgetc (l->stream)) != EOF && (isdigit (c) || c == '.'));
 
   buf[pos] = '\0';
-
-  sungetc (c, l->stream);
 
   // TODO use strtol/strtod instead of atoi/atof
   if (is_float)
@@ -196,7 +157,7 @@ parse_string (Lexer *l)
   bufsize = 20;
   buf = malloc (bufsize);
 
-  while ((c = sgetc (l->stream)) != EOF && c != '"' && c != '\n')
+  while ((c = port_read_char (l->stream)) != EOF && c != '"' && c != '\n')
     {
       if (pos + 1 >= bufsize) // +1 is for null termination
         {
@@ -233,14 +194,14 @@ static Token
 parse_char (Lexer *l)
 {
   Token tok;
-  int c = sgetc (l->stream);
+  int c = port_read_char (l->stream);
 
   tok.type = TOK_ERROR;
   if (c == '\\')
     {
       // escaped: ?\n ?\t ?\s are special, any other ?\x is just x,
       // e.g. ?\( ?\\ ?\"
-      c = sgetc (l->stream);
+      c = port_read_char (l->stream);
       switch (c)
         {
         case 'n':
@@ -276,8 +237,7 @@ parse_char (Lexer *l)
     }
 
   // ?ab is not a character
-  int next = sgetc (l->stream);
-  sungetc (next, l->stream);
+  int next = port_peek_char (l->stream);
   if (next != EOF && !isspace (next) && next != '(' && next != ')'
       && next != '\'' && next != '"' && next != ';')
     {
@@ -304,7 +264,7 @@ try_parse_symbol (Lexer *l, int firstchar)
   bufsize = 20;
   buf = malloc (bufsize);
 
-  do
+  while (1)
     {
       if (pos + 1 >= bufsize) // +1 is for null termination
         {
@@ -319,13 +279,15 @@ try_parse_symbol (Lexer *l, int firstchar)
         }
 
       buf[pos++] = c;
+
+      c = port_peek_char (l->stream);
+      if (c == EOF || c == ' ' || c == '\n' || c == '(' || c == ')'
+          || c == '\'')
+        break;
+      port_read_char (l->stream);
     }
-  while ((c = sgetc (l->stream)) != EOF && c != ' ' && c != '\n' && c != '('
-         && c != ')' && c != '\'');
 
   buf[pos] = '\0'; // null termination
-
-  sungetc (c, l->stream);
 
   tok.type = TOK_SYMBOL;
   tok.symbol = buf;
@@ -337,14 +299,14 @@ static Token
 parse_comma (Lexer *l)
 {
   Token tok;
-  int next = sgetc (l->stream);
+  int next = port_peek_char (l->stream);
   if (next == '@')
-    tok.type = TOK_SPLICE;
-  else
     {
-      tok.type = TOK_UNQUOTE;
-      sungetc (next, l->stream);
+    tok.type = TOK_SPLICE;
+    port_read_char (l->stream);
     }
+  else
+    tok.type = TOK_UNQUOTE;
   return tok;
 }
 
@@ -382,33 +344,4 @@ lex_token_type (TokenType tt)
     default:
       return NULL;
     }
-}
-
-static int
-stream_file_getc (Stream *s)
-{
-  return getc (s->source.file);
-}
-
-static int
-stream_file_ungetc (int c, Stream *s)
-{
-  return ungetc (c, s->source.file);
-}
-
-static int
-stream_string_getc (Stream *s)
-{
-  if (s->source.string.pos >= s->source.string.size)
-    return EOF;
-  // like getc, bytes are returned as unsigned so that 0xFF is not EOF
-  return (unsigned char)s->source.string.data[s->source.string.pos++];
-}
-
-static int
-stream_string_ungetc (int c, Stream *s)
-{
-  if (c == EOF || s->source.string.pos < 1)
-    return EOF;
-  return (unsigned char)s->source.string.data[--s->source.string.pos];
 }

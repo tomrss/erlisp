@@ -1,12 +1,12 @@
 #ifndef _LEXER_H_
 #define _LEXER_H_
 
+#include "lisp.h"
 #include <stdio.h>
 
 #define COMMENT ';'
 
 typedef struct token Token;
-typedef struct stream Stream;
 typedef struct lexer Lexer;
 
 typedef enum
@@ -42,53 +42,15 @@ struct token
   };
 };
 
-struct stream
-{
-  enum
-  {
-    STREAM_FILE,
-    STREAM_STRING,
-  } type;
-  union
-  {
-    FILE *file;
-    struct
-    {
-      const char *data;
-      size_t size;
-      size_t pos;
-    } string;
-  } source;
-  int (*getc_func) (struct stream *s);
-  int (*ungetc_func) (int c, struct stream *s);
-};
-
 struct lexer
 {
-  Stream *stream;
+  Lisp_Port *stream;
   Token token;
   int line;
 };
 
-Stream *stream_file (FILE *file);
-Stream *stream_string (const char *string, size_t size);
-void stream_close (Stream *s);
-
 char *lex_token_type (TokenType tt);
-Lexer *lex_init (Stream *s);
+Lexer lex_init (Lisp_Port *s);
 Token lex_next (Lexer *lexer);
-void lex_close (Lexer *lexer);
-
-static inline int
-sgetc (Stream *s)
-{
-  return s->getc_func (s);
-}
-
-static inline int
-sungetc (int c, Stream *s)
-{
-  return s->ungetc_func (c, s);
-}
 
 #endif /* _LEXER_H_ */

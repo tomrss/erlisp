@@ -238,11 +238,10 @@ test_suite_builtins ()
 static Lisp_Object
 parse_src (const char *src)
 {
-  Lexer *l = lex_init (stream_string (src, strlen (src)));
+  Lexer l = lex_init (unbox_port (make_input_string_port (make_string (src))));
   Lisp_Object form;
-  if (!parse_next_sexp (l, &form))
+  if (!parse_next_sexp (&l, &form))
     form = q_nil;
-  lex_close (l);
   return form;
 }
 
@@ -985,13 +984,31 @@ test_builtins_load_error ()
 static TestResult
 test_builtins_read ()
 {
-  EXPECT_INT ("(read \"42\")", 42);
-  EXPECT_FORM ("(read \"(a (b . c) 1)\")", "(a (b . c) 1)");
-  EXPECT_INT ("(eval (read \"(+ 1 2)\"))", 3);
+  EXPECT_INT ("(read (open-input-string \"42\"))", 42);
+  EXPECT_FORM ("(read (open-input-string \"(a (b . c) 1)\"))",
+               "(a (b . c) 1)");
+  EXPECT_INT ("(eval (read (open-input-string \"(+ 1 2)\")))", 3);
   // syntax errors are signaled, not fatal
-  EXPECT_ERROR ("(read \"(1 2\")", q_error_syntax);
-  EXPECT_ERROR ("(read \")\")", q_error_syntax);
+  EXPECT_ERROR ("(read (open-input-string \"(1 2\"))", q_error_syntax);
+  EXPECT_ERROR ("(read (open-input-string \")\"))", q_error_syntax);
   EXPECT_ERROR ("(read 1)", q_error_type);
+  EXPECT_ERROR ("(read \"42\")", q_error_type);
+  EXPECT_ERROR ("(read (open-output-string))", q_error_portinvalid);
+  // consecutive reads continue from where the previous one stopped
+  EXPECT_FORM ("(let ((p (open-input-string \"(a)b 42\")))"
+               "  (read p)"
+               "  (read p))",
+               "b");
+  EXPECT_INT ("(let ((p (open-input-string \"(a)b 42\")))"
+              "  (read p)"
+              "  (read p)"
+              "  (read p))",
+              42);
+  // the char ending a form stays in the port
+  EXPECT_FORM ("(let ((p (open-input-string \"foo)\")))"
+               "  (read p)"
+               "  (read-char p))",
+               "?)");
   return TEST_RESULT_SUCCESS;
 }
 

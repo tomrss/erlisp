@@ -48,6 +48,9 @@ static Lisp_Object rassoc_w_pred (Lisp_Object key, Lisp_Object alist,
                                   Lisp_Object (*keypred) (Lisp_Object k1,
                                                           Lisp_Object k2));
 
+static inline Lisp_Port *safe_unbox_optionl_in_port (Lisp_Object port);
+static inline Lisp_Port *safe_unbox_optionl_out_port (Lisp_Object port);
+
 Lisp_Object
 f_symbol (Lisp_Object name)
 {
@@ -820,36 +823,39 @@ f_load (Lisp_Object path)
   if (!f)
     file_error (path);
 
-  Lexer *l = lex_init (stream_file (f));
+  Lisp_Object port = make_file_port (f, PORT_IN);
+  Lexer l = lex_init (unbox_port (port));
+
+  // we are about to call eval, and than we will need the port again.
+  // but eval could run GC and completely kill us: we must save the
+  // port from being brutalized by gc
+  stack_current_ref ()->keepalive = port;
 
   Lisp_Object form;
-  while (parse_next_sexp (l, &form))
+  while (parse_next_sexp (&l, &form))
     {
       // load evaluates always in global scope:
       // that's how it's done in emacs and scheme
       eval (l_globalenv, form);
     }
 
-  lex_close (l);
-  fclose (f);
+  // NOTE: an error in eval will cause a non local jump and we will
+  // never close the port. big problem? honestly no: port will be
+  // closed by gc finalizer at next collection. it would be cleaner to
+  // use unwind-protect but it's a bit cumbersome. for now we keep it
+  // like this
 
+  f_close_port (port);
+  stack_current_ref ()->keepalive = q_nil;
   return q_t;
 }
 
 Lisp_Object
-f_read (Lisp_Object string)
+f_read (Lisp_Object port)
 {
-  check_type (string, LISP_STRG);
-
-  Lisp_String *ustring = unbox_string (string);
-  Lexer *l = lex_init (stream_string (ustring->data, ustring->size));
-
-  // TODO lexer leaks on syntax error, needs unwind-protect
-  Lisp_Object form = parse_sexp (l);
-
-  lex_close (l);
-
-  return form;
+  Lisp_Port *p = safe_unbox_optionl_in_port (port);
+  Lexer l = lex_init (p);
+  return parse_sexp (&l);
 }
 
 NORETURN Lisp_Object
@@ -1130,6 +1136,49 @@ f_unix_connect (Lisp_Object path)
                          sizeof (struct sockaddr_un));
 }
 
+int
+port_read_char (Lisp_Port *p)
+{
+  if (p->closed)
+    closedport_error (box_port (p));
+
+  if (p->current != PORT_NOPEEK)
+    {
+      int res = p->current;
+      p->current = PORT_NOPEEK;
+      return res;
+    }
+
+  return p->get_char (p);
+}
+
+int
+port_peek_char (Lisp_Port *p)
+{
+  if (p->closed)
+    closedport_error (box_port (p));
+
+  if (p->current != PORT_NOPEEK)
+    return p->current;
+
+  int c = p->get_char (p);
+  p->current = c;
+  return c;
+}
+
+int
+port_write_char (int c, Lisp_Port *p)
+{
+  if (p->closed)
+    closedport_error (box_port (p));
+
+  int w = p->put_char (c, p);
+  if (w == EOF)
+    // TODO this is not a file error
+    file_error (make_string ("error writing to output port"));
+  return w;
+}
+
 Lisp_Object
 f_close_port (Lisp_Object port)
 {
@@ -1142,17 +1191,7 @@ Lisp_Object
 f_read_char (Lisp_Object port)
 {
   Lisp_Port *p = safe_unbox_optionl_in_port (port);
-  if (p->closed)
-    closedport_error (port);
-
-  if (!nil (p->current))
-    {
-      Lisp_Object res = p->current;
-      p->current = q_nil;
-      return res;
-    }
-
-  int c = p->get_char (p);
+  int c = port_read_char (p);
   if (c == EOF)
     return q_eof;
   return box_char ((unsigned char)c);
@@ -1162,20 +1201,10 @@ Lisp_Object
 f_peek_char (Lisp_Object port)
 {
   Lisp_Port *p = safe_unbox_optionl_in_port (port);
-  if (p->closed)
-    closedport_error (port);
-
-  if (!nil (p->current))
-    return p->current;
-
-  Lisp_Object res;
-  int c = p->get_char (p);
+  int c = port_peek_char (p);
   if (c == EOF)
-    res = q_eof;
-  else
-    res = box_char ((unsigned char)c);
-  p->current = res;
-  return res;
+    return q_eof;
+  return box_char ((unsigned char)c);
 }
 
 Lisp_Object
@@ -1194,13 +1223,7 @@ f_write_char (Lisp_Object c, Lisp_Object port)
 {
   check_type (c, LISP_CHAR);
   Lisp_Port *p = safe_unbox_optionl_out_port (port);
-  if (p->closed)
-    closedport_error (port);
-
-  int w = p->put_char (unbox_char (c), p);
-  if (w == EOF)
-    // TODO this is not a file error
-    file_error (make_string ("error writing to output port"));
+  int w = port_write_char (unbox_char (c), p);
   return box_char ((unsigned char)w);
 }
 

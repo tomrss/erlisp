@@ -86,7 +86,7 @@ parse_sexp_from_tok (Lexer *l, Token tok)
         return ret;
       }
     case TOK_EOF:
-      return q_nil;
+      return q_eof;
     default:
       parser_error ("Unexpected token", &tok);
       return q_nil;
