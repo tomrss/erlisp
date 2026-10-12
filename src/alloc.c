@@ -62,6 +62,13 @@ static void gcmark ();
 
 static struct memstats gcsweep ();
 
+static int
+finalize_port (void *portptr)
+{
+  Lisp_Port *p = (Lisp_Port *)portptr;
+  return p->close (p);
+}
+
 void
 init_alloc ()
 {
@@ -69,7 +76,8 @@ init_alloc ()
   heap = malloc (sizeof (struct heap));
   heap->conses = blkalloc_init (sizeof (Lisp_Cons));
   heap->symbols = blkalloc_init (sizeof (Lisp_Symbol));
-  heap->ports = blkalloc_init (sizeof (Lisp_Port));
+  heap->ports
+      = blkalloc_init_with_finalizer (sizeof (Lisp_Port), &finalize_port);
   // variable-sized types: small objects will be padded in blocks of
   // fixed size. the block size is the size of a flexible array with N
   // elements
@@ -506,8 +514,6 @@ gcmark ()
 static struct memstats
 gcsweep ()
 {
-  // TODO finalize unclosed ports
-
   // sweep fixed blk memory
   blkgcsweep (heap->conses);
   blkgcsweep (heap->symbols);

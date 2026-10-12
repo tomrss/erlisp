@@ -37,12 +37,13 @@ static_assert (offsetof (struct blkpage, data) % BLKALIGN == 0,
 
 struct blkallocator
 {
-  ptrdiff_t blksize;                // constant size of each block
-  size_t blkperpage;                // number of blocks in each page
-  struct blkpage *pages;            // linked list of pages
-  struct blkpage *availpages;       // linked list of pages with free blocks
-  size_t numpages;                  // number of allocated blck pages
-  size_t numused;                   // number of used elements
+  ptrdiff_t blksize;            // constant size of each block
+  size_t blkperpage;            // number of blocks in each page
+  struct blkpage *pages;        // linked list of pages
+  struct blkpage *availpages;   // linked list of pages with free blocks
+  size_t numpages;              // number of allocated blck pages
+  size_t numused;               // number of used elements
+  int (*finalizer) (void *obj); // finalizer for objects
 };
 
 struct blkgcstats
@@ -60,6 +61,8 @@ struct blkmemstats
 };
 
 blkallocator *blkalloc_init (size_t blksize);
+blkallocator *blkalloc_init_with_finalizer (size_t blksize,
+                                            int (*finalizer) (void *));
 void *blkalloc (blkallocator *blka);
 blkgcstats blkgcsweep (blkallocator *blka);
 int blkgcmark (blkallocator *blka, void *objptr);

@@ -74,8 +74,24 @@ static size_t
 blkpagegcsweep (struct blkpage *page)
 {
   size_t live = 0;
+  // NOTE: in these page methods should'nt use blka...
+  blkallocator *blka = page->owner;
   for (size_t i = 0; i < page->numwords; i++)
     {
+      if (blka->finalizer != NULL)
+        {
+          uint64_t deadbmap = page->allocbmap[i] & ~page->gcmarkbmap[i];
+          // cycle dead elements bitmap: get first set bit, act, clear
+          // it, loop until every bit is zero
+          while (deadbmap)
+            {
+              size_t bitpos = __builtin_ctzll (deadbmap);
+              size_t offset = (i * WORDBITS + bitpos) * blka->blksize;
+              blka->finalizer (page->data + offset);
+              deadbmap &= deadbmap - 1; // clear lowest set bit trick
+            }
+        }
+
       // gc sweep is just this: new bitmap of allocated blocks is the
       // previous one excluded every gc marked block
       page->allocbmap[i] &= page->gcmarkbmap[i];
@@ -115,7 +131,16 @@ blkalloc_init (size_t blksize)
     .availpages = NULL,
     .numpages = 0,
     .numused = 0,
+    .finalizer = NULL,
   };
+  return blka;
+}
+
+blkallocator *
+blkalloc_init_with_finalizer (size_t blksize, int (*finalizer) (void *))
+{
+  blkallocator *blka = blkalloc_init (blksize);
+  blka->finalizer = finalizer;
   return blka;
 }
 
