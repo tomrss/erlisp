@@ -1099,6 +1099,12 @@ f_flush_output_port (Lisp_Object port)
   return q_nil;
 }
 
+Lisp_Object
+f_unwind_protect (Lisp_Object form)
+{
+  return unwind_protect (env_current (), form);
+}
+
 void
 init_builtins ()
 {
@@ -1234,6 +1240,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("char-ready?", 0, 1, f_char_ready_p));
   obarray_put (o, DEFSUBR ("write-char", 1, 2, f_write_char));
   obarray_put (o, DEFSUBR ("flush-output-port", 0, 1, f_flush_output_port));
+  obarray_put (o, DEFSUBR ("unwind-protect", 1, UNEVALLED, f_unwind_protect));
 }
 
 // helpers impl

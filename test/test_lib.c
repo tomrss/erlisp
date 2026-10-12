@@ -51,7 +51,7 @@ test_suite_run (TestSuite *suite)
 
       tc = suite->cases[i];
 
-      printf ("test %10s - %-15s... ", suite->name, tc.name);
+      printf ("test %10s - %-20s...", suite->name, tc.name);
 
       if (tc.skip)
         {

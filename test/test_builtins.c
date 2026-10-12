@@ -1,7 +1,9 @@
 #include "../src/alloc.h"
+#include "../src/env.h"
 #include "../src/eval.h"
 #include "../src/lexer.h"
 #include "../src/lisp.h"
+#include "../src/obarray.h"
 #include "../src/parser.h"
 #include "test_lib.h"
 #include <stdio.h>
@@ -13,6 +15,8 @@ static Lisp_Object parse_src (const char *src);
 static int eval_src (const char *src, Lisp_Object *out);
 static int same_form (Lisp_Object x, Lisp_Object y);
 static const char *symname (Lisp_Object symbol);
+// (test-catch form): evaluates form under a handler, returns caught on error
+static void defsubr_test_catch ();
 
 #define EXPECT_NO_ERROR(src, res)                                             \
   TEST_ASSERT (eval_src (src, &res), "%s: unexpected %s", src,                \
@@ -135,6 +139,11 @@ static TestResult test_builtins_port_type_errors ();
 static TestResult test_builtins_file_port ();
 static TestResult test_builtins_current_port ();
 static TestResult test_builtins_port_gc ();
+static TestResult test_builtins_unwind_protect ();
+static TestResult test_builtins_unwind_protect_error ();
+static TestResult test_builtins_unwind_protect_handler ();
+static TestResult test_builtins_unwind_protect_cleanup_error ();
+static TestResult test_builtins_unwind_protect_gc ();
 
 static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "car cdr", .run = test_builtins_car_cdr },
@@ -196,6 +205,11 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "file port", .run = test_builtins_file_port },
   { .skip = 0, .name = "current port", .run = test_builtins_current_port },
   { .skip = 0, .name = "port gc", .run = test_builtins_port_gc },
+  { .skip = 0, .name = "unwind-protect", .run = test_builtins_unwind_protect },
+  { .skip = 0, .name = "unw-prot error", .run = test_builtins_unwind_protect_error },
+  { .skip = 0, .name = "unw-prot handler", .run = test_builtins_unwind_protect_handler },
+  { .skip = 0, .name = "unw-prot cleanup err", .run = test_builtins_unwind_protect_cleanup_error },
+  { .skip = 0, .name = "unw-prot gc", .run = test_builtins_unwind_protect_gc },
   {}, // terminator
 };
 
@@ -251,6 +265,21 @@ symname (Lisp_Object symbol)
   if (type_of (symbol) != LISP_SYMB)
     return "<not a symbol>";
   return unbox_string (unbox_symbol (symbol)->name)->data;
+}
+
+static Lisp_Object
+test_catch (Lisp_Object form)
+{
+  Lisp_Object res;
+  if (safe_eval (env_current (), f_car (form), &res))
+    return res;
+  return f_intern (make_string ("caught"));
+}
+
+static void
+defsubr_test_catch ()
+{
+  obarray_put (v_obarray, DEFSUBR ("test-catch", 1, UNEVALLED, test_catch));
 }
 
 // test cases implementation
@@ -1150,5 +1179,144 @@ test_builtins_port_gc ()
   EXPECT_NO_ERROR_SRC ("(symbol \"port-gc-sym\")");
   EXPECT_FORM ("(eof-object? (symbol \"port-gc-sym\"))", "nil");
   EXPECT_FORM ("(eof-object? (read-char (open-input-string \"\")))", "t");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_unwind_protect ()
+{
+  // local exit: the value is the body one, the cleanups run in order
+  EXPECT_NO_ERROR_SRC ("(define up-log nil)");
+  EXPECT_INT ("(unwind-protect (+ 40 2)"
+              "  (set! up-log (cons 1 up-log))"
+              "  (set! up-log (cons 2 up-log)))",
+              42);
+  EXPECT_FORM ("up-log", "(2 1)");
+
+  // no cleanups
+  EXPECT_INT ("(unwind-protect 7)", 7);
+
+  // cleanups are forms, not only calls
+  EXPECT_INT ("(unwind-protect 1 2 'x up-log)", 1);
+
+  // cleanups see the locals of the unwind-protect env
+  EXPECT_INT ("(let ((x 5)) (unwind-protect (+ x 1) (set! up-log x)))", 6);
+  EXPECT_INT ("up-log", 5);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_unwind_protect_error ()
+{
+  Lisp_Object boom = f_intern (make_string ("up-boom"));
+
+  // the cleanups run from the innermost, then the error propagates
+  EXPECT_NO_ERROR_SRC ("(define up-log nil)");
+  EXPECT_ERROR ("(unwind-protect"
+                "  (unwind-protect (signal 'up-boom)"
+                "    (set! up-log (cons 'inner up-log)))"
+                "  (set! up-log (cons 'outer up-log)))",
+                boom);
+  EXPECT_FORM ("up-log", "(outer inner)");
+
+  // through function calls, each cleanup with the locals of its own env
+  EXPECT_NO_ERROR_SRC ("(define up-log nil)");
+  EXPECT_NO_ERROR_SRC ("(define up-throw (lambda (a) (signal 'up-boom a)))");
+  EXPECT_NO_ERROR_SRC ("(define up-f (lambda (x)"
+                       "  (unwind-protect (up-throw x)"
+                       "    (set! up-log (cons x up-log)))))");
+  EXPECT_ERROR ("(let ((y 1))"
+                "  (unwind-protect (up-f 2)"
+                "    (set! up-log (cons y up-log))))",
+                boom);
+  EXPECT_FORM ("up-log", "(1 2)");
+
+  // the cleanups do not change the backtrace, innermost frame first
+  Lisp_Object err;
+  TEST_ASSERT (!eval_src ("(unwind-protect (up-throw 1) 2)", &err),
+               "expected up-boom, got no error");
+  TEST_ASSERT (
+      same_form (f_error_backtrace (err),
+                 parse_src ("(\"signal\" \"up-throw\" \"unwind-protect\")")),
+      "expected backtrace (\"signal\" \"up-throw\" \"unwind-protect\")");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_unwind_protect_handler ()
+{
+  defsubr_test_catch ();
+  EXPECT_FORM ("(test-catch (signal 'up-boom))", "caught");
+
+  // the handler is between the two unwind-protects: the error runs only the
+  // inner cleanup, the outer one runs at its own exit
+  EXPECT_NO_ERROR_SRC ("(define up-log nil)");
+  EXPECT_NO_ERROR_SRC (
+      "(unwind-protect"
+      "  (progn"
+      "    (test-catch (unwind-protect (signal 'up-boom)"
+      "                  (set! up-log (cons 'inner up-log))))"
+      "    (set! up-log (cons 'after up-log)))"
+      "  (set! up-log (cons 'outer up-log)))");
+  EXPECT_FORM ("up-log", "(outer after inner)");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_unwind_protect_cleanup_error ()
+{
+  Lisp_Object boom2 = f_intern (make_string ("up-boom2"));
+
+  // an error in a cleanup replaces the one in flight: the rest of that
+  // cleanup is skipped and it is not run again, the outer cleanups still run
+  EXPECT_NO_ERROR_SRC ("(define up-log nil)");
+  EXPECT_ERROR ("(unwind-protect"
+                "  (unwind-protect (signal 'up-boom)"
+                "    (set! up-log (cons 'c1 up-log))"
+                "    (signal 'up-boom2)"
+                "    (set! up-log (cons 'c1-rest up-log)))"
+                "  (set! up-log (cons 'c2 up-log)))",
+                boom2);
+  EXPECT_FORM ("up-log", "(c2 c1)");
+
+  // same at local exit
+  EXPECT_NO_ERROR_SRC ("(define up-log nil)");
+  EXPECT_ERROR ("(unwind-protect 1"
+                "  (set! up-log (cons 'c up-log))"
+                "  (signal 'up-boom2))",
+                boom2);
+  EXPECT_FORM ("up-log", "(c)");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_unwind_protect_gc ()
+{
+  // the conses allocated after the gc try to reuse the blocks of what was
+  // wrongly freed
+
+  // local exit: the body value survives a gc in the cleanups
+  EXPECT_FORM ("(unwind-protect (cons 1 (cons 2 nil))"
+               "  (gc)"
+               "  (cons (cons 0 0) (cons 0 0)))",
+               "(1 2)");
+
+  // non local exit: the error, the remaining cleanups and the env survive a
+  // gc in the cleanups
+  EXPECT_NO_ERROR_SRC ("(define up-log nil)");
+  EXPECT_NO_ERROR_SRC ("(define up-throw (lambda (a) (signal 'up-boom a)))");
+  Lisp_Object err;
+  TEST_ASSERT (!eval_src ("(let ((l (cons 1 (cons 2 nil))))"
+                          "  (unwind-protect (up-throw (cons 3 4))"
+                          "    (gc)"
+                          "    (cons (cons 0 0) (cons 0 0))"
+                          "    (set! up-log (car (cdr l)))))",
+                          &err),
+               "expected up-boom, got no error");
+  TEST_ASSERT (eq (f_error_symbol (err), f_intern (make_string ("up-boom"))),
+               "expected up-boom, got %s", symname (f_error_symbol (err)));
+  TEST_ASSERT (same_form (f_error_data (err), parse_src ("(3 . 4)")),
+               "expected error data (3 . 4)");
+  EXPECT_INT ("up-log", 2);
   return TEST_RESULT_SUCCESS;
 }

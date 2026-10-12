@@ -518,6 +518,7 @@ Lisp_Object f_peek_char (Lisp_Object port);
 Lisp_Object f_char_ready_p (Lisp_Object port);
 Lisp_Object f_write_char (Lisp_Object c, Lisp_Object port);
 Lisp_Object f_flush_output_port (Lisp_Object port);
+Lisp_Object f_unwind_protect (Lisp_Object form);
 
 extern Lisp_Object q_nil;
 extern Lisp_Object q_t;

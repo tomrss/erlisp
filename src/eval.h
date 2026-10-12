@@ -13,6 +13,7 @@ Lisp_Object call_lambda (Lisp_Lambda *ulambda, Lisp_Object *argvals);
 Lisp_Object progn (Lisp_Object env, Lisp_Object form);
 Lisp_Object let (Lisp_Object env, Lisp_Object form);
 Lisp_Object define (Lisp_Object env, Lisp_Object form);
+Lisp_Object unwind_protect (Lisp_Object env, Lisp_Object form);
 
 void handlers_walk (void (*fun) (Lisp_Object));
 

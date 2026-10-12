@@ -482,6 +482,8 @@ gcmarkstackframe (struct stackframe sf)
   gcmarkobj (sf.env);
   for (int j = 0; j < sf.nargs; j++)
     gcmarkobj (sf.argvals[j]);
+  gcmarkobj (sf.cleanups);
+  gcmarkobj (sf.keepalive);
 }
 
 static void

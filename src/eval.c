@@ -1,14 +1,13 @@
-#include <alloca.h>
-#include <setjmp.h>
-#include <stdio.h>
-
+#include "eval.h"
 #include "alloc.h"
 #include "env.h"
 #include "error.h"
-#include "eval.h"
 #include "lisp.h"
 #include "print.h"
 #include "stack.h"
+#include <alloca.h>
+#include <setjmp.h>
+#include <stdio.h>
 
 // TODO this number is completely random
 #define HANDLERSIZE 512
@@ -379,6 +378,39 @@ define (Lisp_Object env, Lisp_Object form)
   return value;
 }
 
+static inline void
+run_cleanups (struct stackframe *sf)
+{
+  if (!consp (sf->cleanups))
+    // no cleanups
+    return;
+
+  Lisp_Object cleanups = sf->cleanups;
+  sf->cleanups = q_nil;
+  progn (sf->env, cleanups);
+}
+
+Lisp_Object
+unwind_protect (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object body = f_car (form);
+  Lisp_Object cleanups = f_cdr (form);
+
+  struct stackframe *sf = stack_current_ref ();
+  sf->cleanups = cleanups;
+
+  Lisp_Object res = eval (env, body);
+
+  // local exit: no error
+
+  // protect res from gc during cleanups
+  sf->keepalive = res;
+
+  run_cleanups (sf);
+
+  return res;
+}
+
 // maybe this is also useful somewhere else?
 static Lisp_Object
 make_error (Lisp_Object symbol, Lisp_Object data, Lisp_Object backtrace)
@@ -398,10 +430,29 @@ xsignal (Lisp_Object symbol, Lisp_Object data)
 
   struct handler *h = current_handler ();
 
-  Lisp_Object backtrace = stack_unwind (h->stackind, NULL);
+  // NOTE: in a perfect world, we want to just signal the error and have a non
+  // local exit with longjmp. the setjmp "listener" to the error should have
+  // the duty to react to the error and do stuff, like stack unwinding,
+  // invoking handlers, unwind-protect cleanups, and everything. this should
+  // just save the error in the handler frame and jump.
+  // So why we do stuff here (error signaling) instead of condition_case (error
+  // reaction)?
+  // This is because when we do longjmp we throw away the C stack, where
+  // argvals are allocated (alloca). It does not seem right to malloc them in
+  // the C heap, but this means that in setjmp the stack frames from current
+  // depth to the depth of the handler are invalid, they contain unsafe argvals
+  // that are no more in the C stack.
+  // That's why is safe to unwind the Lisp stack here, and so every operation
+  // that requires the unwinded stack frames must be done here. The
+  // unwind-protect also must be done here for same reason (it requires
+  // unwinded stack frames). The condition-case handlers are managed in the
+  // proper handler (condition_case), that is correct.
+  // Not clean, but effective.
 
-  Lisp_Object err = make_error (symbol, data, backtrace);
-  h->error = err;
+  Lisp_Object backtrace = stack_backtrace (h->stackind);
+  h->error = make_error (symbol, data, backtrace);
+
+  stack_unwind (h->stackind, run_cleanups);
 
   longjmp (h->jmp, 1);
 }
