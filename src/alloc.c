@@ -1,6 +1,10 @@
 #include "alloc.h"
 #include "blkalloc.h"
 #include "error.h"
+// TODO this is very wrong and very sad, incredibly ugly as well.
+// alloc should not depend on eval. this is used for adding errors in handlers
+// to gc roots, find another way to it cleanly
+#include "eval.h"
 #include "lisp.h"
 #include "loballoc.h"
 #include "print.h"
@@ -493,6 +497,10 @@ gcmark ()
 
   // code that is being evaluated in the stack is a gc root
   stack_walk (gcmarkstackframe);
+
+  // errors in the handlers must not be collected, they are roots
+  // TODO not clean because depends on eval.h
+  handlers_walk (&gcmarkobj);
 
   // TODO: obarray symbols should be protected from gc in other
   // way. maybe definining a "pure lisp" memory like in Emacs Lisp

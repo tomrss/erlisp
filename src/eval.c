@@ -46,6 +46,13 @@ pop_handler ()
   return &handlers[--handlerdepth];
 }
 
+void
+handlers_walk (void (*fun) (Lisp_Object))
+{
+  for (int i = handlerdepth - 1; i >= 0; i--)
+    fun (handlers[i].error);
+}
+
 Lisp_Object
 eval (Lisp_Object env, Lisp_Object form)
 {
