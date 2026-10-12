@@ -7,9 +7,13 @@
 #include "obarray.h"
 #include "parser.h"
 #include "stack.h"
+#include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 Lisp_Object q_nil;
 Lisp_Object q_t;
@@ -23,6 +27,7 @@ Lisp_Object q_error_funcinvalid;
 Lisp_Object q_error_maxhandlerdepth;
 Lisp_Object q_error_portclosed;
 Lisp_Object q_error_portinvalid;
+Lisp_Object q_error_portio;
 Lisp_Object q_error_stackoverflow;
 Lisp_Object q_error_syntax;
 Lisp_Object q_error_type;
@@ -1029,6 +1034,102 @@ f_get_output_string (Lisp_Object port)
   return make_nstring (p->backend.string.data, p->backend.string.pos);
 }
 
+static inline void
+snprintf_addr (struct sockaddr *addr, char *buf, size_t size)
+{
+  char ip6[INET6_ADDRSTRLEN]; // ip4 will fit here
+  struct sockaddr_in *addr_in;
+  struct sockaddr_in6 *addr_in6;
+  struct sockaddr_un *addr_un;
+
+  switch (addr->sa_family)
+    {
+    case AF_INET:
+      addr_in = (struct sockaddr_in *)addr;
+      inet_ntop (AF_INET, &addr_in->sin_addr, ip6, sizeof (ip6));
+      snprintf (buf, size, "%s:%d", ip6, ntohs (addr_in->sin_port));
+      break;
+    case AF_INET6:
+      addr_in6 = (struct sockaddr_in6 *)addr;
+      inet_ntop (AF_INET6, &addr_in6->sin6_addr, ip6, sizeof (ip6));
+      snprintf (buf, size, "[%s]:%d", ip6, ntohs (addr_in6->sin6_port));
+      break;
+    case AF_UNIX:
+      addr_un = (struct sockaddr_un *)addr;
+      snprintf (buf, size, "%s", addr_un->sun_path);
+      break;
+    default:
+      snprintf (buf, size, "[unknown socket type");
+    }
+}
+
+static inline Lisp_Object
+connect_socket (int fd, struct sockaddr *addr, socklen_t len)
+{
+  if (connect (fd, addr, len) < 0)
+    {
+      int err = errno;
+      close (fd);
+      char buf[256] = { 0 };
+      snprintf_addr (addr, buf, sizeof (buf));
+      portio_error (buf, err);
+    }
+
+  // we open a couple of FILEs that target the same socket underneath.
+  // this is because r+ file on socket is not doable. this will be ditched once
+  // we have non-blocking sockets
+  FILE *in = fdopen (fd, "r");
+  FILE *out = fdopen (dup (fd), "w");
+
+  return f_cons (make_file_port (in, PORT_IN), make_file_port (out, PORT_OUT));
+}
+
+Lisp_Object
+f_tcp_connect (Lisp_Object host, Lisp_Object port)
+{
+  check_type (host, LISP_STRG);
+  check_type (port, LISP_INTG);
+
+  if (unbox_int (port) < 0 || unbox_int (port) > 65535)
+    f_signal (q_error, f_cons (make_string ("port out of range"),
+                               f_cons (port, q_nil)));
+
+  int fd = socket (AF_INET, SOCK_STREAM, 0);
+  if (fd < 0)
+    portio_error ("tcp-socket", errno);
+
+  struct sockaddr_in addr;
+  memset (&addr, 0, sizeof addr);
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons (unbox_int (port));
+  if (inet_pton (AF_INET, unbox_string (host)->data, &addr.sin_addr) < 1)
+    {
+      close (fd);
+      f_signal (q_error_portio, f_cons (host, f_cons (port, q_nil)));
+    }
+
+  return connect_socket (fd, (struct sockaddr *)&addr,
+                         sizeof (struct sockaddr_in));
+}
+
+Lisp_Object
+f_unix_connect (Lisp_Object path)
+{
+  check_type (path, LISP_STRG);
+
+  int fd = socket (AF_UNIX, SOCK_STREAM, 0);
+  if (fd < 0)
+    portio_error ("unix-socket", errno);
+
+  struct sockaddr_un addr;
+  memset (&addr, 0, sizeof addr);
+  addr.sun_family = AF_UNIX;
+  strncpy (addr.sun_path, unbox_string (path)->data, sizeof addr.sun_path - 1);
+
+  return connect_socket (fd, (struct sockaddr *)&addr,
+                         sizeof (struct sockaddr_un));
+}
+
 Lisp_Object
 f_close_port (Lisp_Object port)
 {
@@ -1142,6 +1243,7 @@ init_builtins ()
   q_error_maxhandlerdepth = make_str_symbol ("max-handler-depth-error");
   q_error_portclosed = make_str_symbol ("port-closed-error");
   q_error_portinvalid = make_str_symbol ("port-invalid-error");
+  q_error_portio = make_str_symbol ("port-io-error");
   q_error_stackoverflow = make_str_symbol ("stack-overflow-error");
   q_error_syntax = make_str_symbol ("syntax-error");
   q_error_type = make_str_symbol ("type-error");
@@ -1172,6 +1274,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, q_error_maxhandlerdepth);
   obarray_put (o, q_error_portclosed);
   obarray_put (o, q_error_portinvalid);
+  obarray_put (o, q_error_portio);
   obarray_put (o, q_error_stackoverflow);
   obarray_put (o, q_error_syntax);
   obarray_put (o, q_error_type);
@@ -1257,6 +1360,8 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("open-input-string", 1, 1, f_open_input_string));
   obarray_put (o, DEFSUBR ("open-output-string", 0, 0, f_open_output_string));
   obarray_put (o, DEFSUBR ("get-output-string", 1, 1, f_get_output_string));
+  obarray_put (o, DEFSUBR ("tcp-connect", 2, 2, f_tcp_connect));
+  obarray_put (o, DEFSUBR ("unix-connect", 1, 1, f_unix_connect));
   obarray_put (o, DEFSUBR ("close-port", 1, 1, f_close_port));
   obarray_put (o, DEFSUBR ("read-char", 0, 1, f_read_char));
   obarray_put (o, DEFSUBR ("peek-char", 0, 1, f_peek_char));

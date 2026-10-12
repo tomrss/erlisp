@@ -7,6 +7,7 @@
 #include "stack.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 // simple inlined error helpers for avoiding boilerplate
 
@@ -139,6 +140,15 @@ NORETURN static inline void
 closedport_error (Lisp_Object port)
 {
   f_signal (q_error_portclosed, f_cons (port, q_nil));
+}
+
+NORETURN static inline void
+portio_error (const char *addr, int errnum)
+{
+  Lisp_Object data = f_cons (box_int (errnum), q_nil);
+  data = f_cons (make_string (strerror (errnum)), data);
+  data = f_cons (make_string (addr), data);
+  f_signal (q_error_portio, data);
 }
 
 NORETURN static inline void
