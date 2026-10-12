@@ -43,7 +43,6 @@ struct blkallocator
   struct blkpage *availpages;       // linked list of pages with free blocks
   size_t numpages;                  // number of allocated blck pages
   size_t numused;                   // number of used elements
-  int (*blk_free_pred) (void *ptr); // tells when a blk can be freed
 };
 
 struct blkgcstats
