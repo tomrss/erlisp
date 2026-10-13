@@ -497,6 +497,7 @@ Lisp_Object f_lambda (Lisp_Object form);
 Lisp_Object f_define (Lisp_Object form);
 Lisp_Object f_format (int argc, Lisp_Object *argv);
 Lisp_Object f_load (Lisp_Object path);
+Lisp_Object f_load_from_port (Lisp_Object port);
 Lisp_Object f_read (Lisp_Object string);
 NORETURN Lisp_Object f_signal (Lisp_Object symbol, Lisp_Object data);
 Lisp_Object f_error_symbol (Lisp_Object err);

@@ -2,3 +2,5 @@ erlisp
 test/test_erlisp
 obj/
 tmp/
+compile_commands.json
+.cache/

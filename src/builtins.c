@@ -6,6 +6,7 @@
 #include "lisp.h"
 #include "obarray.h"
 #include "parser.h"
+#include "prelude.h"
 #include "stack.h"
 #include <arpa/inet.h>
 #include <errno.h>
@@ -824,20 +825,12 @@ f_load (Lisp_Object path)
     file_error (path);
 
   Lisp_Object port = make_file_port (f, PORT_IN);
-  Lexer l = lex_init (unbox_port (port));
 
   // we are about to call eval, and than we will need the port again.
   // but eval could run GC and completely kill us: we must save the
   // port from being brutalized by gc
   stack_current_ref ()->keepalive = port;
-
-  Lisp_Object form;
-  while (parse_next_sexp (&l, &form))
-    {
-      // load evaluates always in global scope:
-      // that's how it's done in emacs and scheme
-      eval (l_globalenv, form);
-    }
+  Lisp_Object res = f_load_from_port (port);
 
   // NOTE: an error in eval will cause a non local jump and we will
   // never close the port. big problem? honestly no: port will be
@@ -847,6 +840,24 @@ f_load (Lisp_Object path)
 
   f_close_port (port);
   stack_current_ref ()->keepalive = q_nil;
+
+  return res;
+}
+
+Lisp_Object
+f_load_from_port (Lisp_Object port)
+{
+  Lisp_Port *p = safe_unbox_optionl_in_port (port);
+  Lexer l = lex_init (p);
+
+  Lisp_Object form;
+  while (parse_next_sexp (&l, &form))
+    {
+      // load evaluates always in global scope:
+      // that's how it's done in emacs and scheme
+      eval (l_globalenv, form);
+    }
+
   return q_t;
 }
 
@@ -1283,6 +1294,8 @@ init_builtins ()
   stack_init (l_globalenv);
   currentenv = malloc (sizeof (Lisp_Object));
   *currentenv = l_globalenv;
+
+  init_prelude ();
 }
 
 static void
@@ -1364,6 +1377,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
   obarray_put (o, DEFSUBR ("format", 2, MANY, f_format));
   obarray_put (o, DEFSUBR ("load", 1, 1, f_load));
+  obarray_put (o, DEFSUBR ("load-from-port", 0, 1, f_load_from_port));
   obarray_put (o, DEFSUBR ("read", 1, 1, f_read));
   obarray_put (o, DEFSUBR ("signal", 1, 2, f_signal));
   obarray_put (o, DEFSUBR ("error-symbol", 1, 1, f_error_symbol));

@@ -1,5 +1,5 @@
 CC ?= gcc
-CFLAGS ?= -Wall -Wextra -O2 -flto -DHAVE_READLINE=1
+CFLAGS ?= -Wall -Wextra -O2 -flto -DHAVE_READLINE=1 -std=gnu23 --embed-dir=lisp
 LDFLAGS ?= -flto
 LDLIBS ?= -lreadline
 SRC_DIR = src
@@ -19,13 +19,15 @@ TEST_OBJECTS := $(patsubst $(TEST_DIR)/test_%.c,$(OBJ_DIR)/test_%.o,$(TEST_SOURC
 
 all: $(TARGET)
 
-debug: CFLAGS = -Wall -Wextra -O0 -g -fsanitize=address -DHAVE_READLINE=1
+debug: CFLAGS = -Wall -Wextra -O0 -g -fsanitize=address -DHAVE_READLINE=1 -std=gnu23 --embed-dir=lisp
 debug: LDFLAGS = -g -fsanitize=address
 debug: LDLIBS += -fsanitize=address
 debug: $(TARGET)
 
 $(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o $@
+
+$(OBJ_DIR)/prelude.o: lisp/prelude.erlisp
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -36,7 +38,7 @@ $(OBJ_DIR):
 test: test_$(TARGET)
 	./$(TEST_DIR)/$<
 
-test-debug: CFLAGS = -Wall -Wextra -O0 -g -fsanitize=address -DHAVE_READLINE=1
+test-debug: CFLAGS = -Wall -Wextra -O0 -g -fsanitize=address -DHAVE_READLINE=1 -std=gnu23 --embed-dir=lisp
 test-debug: LDFLAGS = -g -fsanitize=address
 test-debug: LDLIBS += -fsanitize=address
 test-debug: test_$(TARGET)
