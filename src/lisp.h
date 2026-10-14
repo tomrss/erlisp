@@ -177,18 +177,22 @@ union lisp_subr_fun
   lisp_subr_fun_many f999; /* many */
 };
 
-struct lisp_subr
+struct lisp_callable_header
 {
-  const char *name;
-  union lisp_subr_fun function;
   int minargs;
   int maxargs;
 };
 
+struct lisp_subr
+{
+  struct lisp_callable_header header;
+  const char *name;
+  union lisp_subr_fun function;
+};
+
 struct lisp_lambda
 {
-  int minargs;
-  int maxargs;
+  struct lisp_callable_header header;
   Lisp_Object env;
   Lisp_Object form;
   Lisp_Object args[];
@@ -461,6 +465,7 @@ Lisp_Object f_char_p (Lisp_Object o);
 Lisp_Object f_null_p (Lisp_Object o);
 Lisp_Object f_setq (Lisp_Object form);
 Lisp_Object f_eval (Lisp_Object form);
+Lisp_Object f_apply (Lisp_Object fun, Lisp_Object args);
 Lisp_Object f_assoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_assq (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_rassoc (Lisp_Object key, Lisp_Object alist);
@@ -639,6 +644,24 @@ charp (Lisp_Object o)
 {
   return tag_of (o) == LISP_TAG_IMMD
          && ((o >> TAGBITS) & IMMDSUBTAGMASK) == LISP_TAG_CHAR;
+}
+
+static inline int
+lambdap (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_LMBD;
+}
+
+static inline int
+subrp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_SUBR;
+}
+
+static inline const char *
+symbol_name (Lisp_Object s)
+{
+  return unbox_string (unbox_symbol (s)->name)->data;
 }
 
 #endif // LISP_H

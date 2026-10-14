@@ -107,6 +107,26 @@ f_eval (Lisp_Object form)
 }
 
 Lisp_Object
+f_apply (Lisp_Object fun, Lisp_Object args)
+{
+  int nargs = unbox_int (f_length (args));
+  Lisp_Object *aargs = alloca (nargs * sizeof (Lisp_Object));
+
+  Lisp_Object tail = args;
+  int i = 0;
+  while (!nil (tail))
+    {
+      // don't check i < nargs, defensive programming, let's trust our f_length impl
+      aargs[i] = f_car (tail);
+      tail = f_cdr (tail);
+      i++;
+    }
+
+  return apply (fun, nargs, aargs);
+}
+
+
+Lisp_Object
 f_car (Lisp_Object cons)
 {
   if (nil (cons))
@@ -1340,6 +1360,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("nil?", 1, 1, f_nil_p));
   obarray_put (o, DEFSUBR ("set!", 2, UNEVALLED, f_setq));
   obarray_put (o, DEFSUBR ("eval", 1, 1, f_eval));
+  obarray_put (o, DEFSUBR ("apply", 2, 2, f_apply));
   obarray_put (o, DEFSUBR ("assoc", 2, 2, f_assoc));
   obarray_put (o, DEFSUBR ("assq", 2, 2, f_assq));
   obarray_put (o, DEFSUBR ("rassoc", 2, 2, f_rassoc));

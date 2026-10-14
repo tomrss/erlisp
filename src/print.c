@@ -112,11 +112,11 @@ fprint_form (FILE *stream, Lisp_Object form)
       break;
     case LISP_SUBR:
       fprintf (stream, "['%s',%d,%d]", unbox_subr (form)->name,
-               unbox_subr (form)->minargs, unbox_subr (form)->maxargs);
+               unbox_subr (form)->header.minargs, unbox_subr (form)->header.maxargs);
       break;
     case LISP_LMBD:
-      fprintf (stream, "[lambda,%d,%d]", unbox_lambda (form)->minargs,
-               unbox_lambda (form)->maxargs);
+      fprintf (stream, "[lambda,%d,%d]", unbox_lambda (form)->header.minargs,
+               unbox_lambda (form)->header.maxargs);
       break;
     case LISP_SYMB:
       fprintf (stream, "%.*s",

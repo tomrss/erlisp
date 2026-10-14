@@ -120,74 +120,71 @@ eval_symbol (Lisp_Object env, Lisp_Object symbol)
 }
 
 Lisp_Object
-call_function (Lisp_Object env, Lisp_Object form)
+apply (Lisp_Object fun, int nargs, Lisp_Object *args)
 {
-  // TODO refactor and rationalize this function. rather ugly code.
-  Lisp_Object result;
-  Lisp_Subr *subr;
-  Lisp_Lambda *lambda;
-  int minargs;
-  int maxargs;
-  const char *fname;
+  if (!lambdap (fun) && !subrp (fun))
+    invalidfunc_error (fun);
 
-  Lisp_Object funyielding = f_car (form);
-  Lisp_Object funargs = f_cdr (form);
+  struct lisp_callable_header *header = unbox_pointer (fun);
 
-  Lisp_Object fun = eval (env, funyielding);
+  int minargs = header->minargs;
+  int maxargs = header->maxargs;
 
-  switch (type_of (fun))
-    {
-    case LISP_SUBR:
-      subr = unbox_subr (fun);
-      minargs = subr->minargs;
-      maxargs = subr->maxargs;
-      fname = subr->name;
-      break;
-    case LISP_LMBD:
-      lambda = unbox_lambda (fun);
-      minargs = lambda->minargs;
-      maxargs = lambda->maxargs;
-      if (symbolp (funyielding))
-        fname = unbox_string (unbox_symbol (funyielding)->name)->data;
-      else
-        fname = "anonymous";
-      break;
-    default:
-      debug_printf ("funcsym: ");
-      debug_print_form (funyielding);
-      debug_printf ("\nfun: ");
-      debug_print_form (fun);
-      debug_printf ("\n");
-      invalidfunc_error (fun);
-    }
-
-  int nargs = unbox_int (f_length (funargs));
+  if (maxargs == UNEVALLED)
+    // special form not appliable
+    invalidfunc_error (fun);
 
   if (nargs < minargs || nargs > maxargs)
     funcargs_error (minargs, maxargs, nargs);
 
-  /* number of arguments the function will be called with */
-  int arity;
-  switch (maxargs)
+  int arity = maxargs != MANY ? maxargs : nargs;
+
+  Lisp_Object *argvals;
+  if (arity > nargs)
     {
-    case MANY:
-      arity = nargs;
-      break;
-    case UNEVALLED:
-      // this UNEVALLED in maxargs is a old dirty trick in emacs lisp.
-      // what really this means is that this is not a real function ma like a
-      // macro that directly manipulates lisp forms instead that data, and it
-      // must be expanded rather than evaluated
+      // pad with nil
+      argvals = alloca (arity * sizeof (Lisp_Object));
+      for (int i = 0; i < nargs; i++)
+        argvals[i] = args[i];
+      for (int i = nargs; i < arity; i++)
+        argvals[i] = q_nil;
+    }
+  else
+    argvals = args;
 
+  if (subrp (fun))
+    return call_subr (unbox_subr (fun), maxargs, arity, argvals);
+  else // is lambda
+    return call_lambda (unbox_lambda (fun), argvals);
+}
+
+Lisp_Object
+call_function (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object funyielding = f_car (form);
+  Lisp_Object funargs = f_cdr (form);
+  Lisp_Object fun = eval (env, funyielding);
+
+  const char *fname;
+  if (lambdap (fun))
+    fname = symbolp (funyielding) ? symbol_name (funyielding) : "anonymous";
+  else if (subrp (fun))
+    fname = unbox_subr (fun)->name;
+  else
+    invalidfunc_error (fun);
+
+  struct lisp_callable_header *header = unbox_pointer (fun);
+  int maxargs = header->maxargs;
+
+  if (maxargs == UNEVALLED)
+    {
+      // this UNEVALLED in maxargs is a old dirty trick in emacs lisp
+      // for handling special forms
       if (type_of (fun) == LISP_LMBD)
-        {
-          internal_error (
-              "Lambda cannot have unevalled args; fexpr not supported");
-          // not supported YET but it would be fun!!
-          // https://web.cs.wpi.edu/~jshutt/dissertation/etd-090110-124904-Shutt-Dissertation.pdf
-        }
-
-      // the FEXPR path should PROBABLY live here? in some way?
+        // not supported YET but it would be fun!!
+        // https://web.cs.wpi.edu/~jshutt/dissertation/etd-090110-124904-Shutt-Dissertation.pdf
+        internal_error (
+            "Lambda cannot have unevalled args; fexpr not supported");
 
       stack_push ((struct stackframe){
           .fname = fname, .env = env, .form = form, .nargs = 0 });
@@ -198,40 +195,37 @@ call_function (Lisp_Object env, Lisp_Object form)
         debug_printf ("GC executed");
 
       // TODO ugly return in a switch that should decide arity!
-      result = call_unevalled_subr (subr, funargs);
+      Lisp_Object result = call_unevalled_subr (unbox_subr (fun), funargs);
       stack_pop ();
       return result;
-    default:
-      arity = maxargs;
     }
 
-  Lisp_Object argtail = funargs;
+  // this will traverse the list; is this correct??
+  int nargs = unbox_int (f_length (funargs));
 
-  Lisp_Object *argvals = alloca (arity * sizeof (Lisp_Object));
-  for (int i = 0; i < arity; i++)
+  Lisp_Object *argvals = alloca (nargs * sizeof (Lisp_Object));
+  for (int i = 0; i < nargs; i++)
     argvals[i] = q_nil;
 
   stack_push ((struct stackframe){ .fname = fname,
                                    .env = env,
                                    .form = form,
                                    .argvals = argvals,
-                                   .nargs = arity });
+                                   .nargs = nargs });
 
   // gc is orrible here, but here all roots are protected
   // TODO find an elegand solution to this horror
   if (gc_maybe ())
     debug_printf ("GC executed");
 
-  for (int i = 0; i < arity; i++)
+  Lisp_Object argtail = funargs;
+  for (int i = 0; i < nargs; i++)
     {
       argvals[i] = eval (env, f_car (argtail));
       argtail = f_cdr (argtail);
     }
 
-  if (type_of (fun) == LISP_SUBR)
-    result = call_subr (subr, maxargs, arity, argvals);
-  else // is lambda
-    result = call_lambda (lambda, argvals);
+  Lisp_Object result = apply (fun, nargs, argvals);
 
   stack_pop ();
 
@@ -294,7 +288,7 @@ call_lambda (Lisp_Lambda *ulambda, Lisp_Object *argvals)
 {
   // create a new environment binding lambda arg symbols to actual values
   Lisp_Object env = env_new (ulambda->env);
-  for (int i = 0; i < ulambda->maxargs; i++)
+  for (int i = 0; i < ulambda->header.maxargs; i++)
     {
       Lisp_Object argsym = ulambda->args[i];
       Lisp_Object argval = argvals[i];
@@ -372,8 +366,8 @@ define (Lisp_Object env, Lisp_Object form)
   else if (listp (var))
     {
       // this is the shortened form:
-      // (define (f arg) (body)) instead of (define f (lambda (arg) (body))) .
-      // once we have macroexpand, it will handle this cleanly
+      // (define (f arg) (body)) instead of (define f (lambda (arg) (body)))
+      // . once we have macroexpand, it will handle this cleanly
       symbol = f_car (var);
       check_type (symbol, LISP_SYMB);
       value = f_lambda (f_cons (f_cdr (var), f_cdr (form)));

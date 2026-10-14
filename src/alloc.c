@@ -325,11 +325,10 @@ make_subr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
   // plain allocation, SUBR is not subject to memory management and gc
   Lisp_Subr *subr = malloc (sizeof (Lisp_Subr));
 
-  subr->name = name; // TODO probably safer to copy name // TODO2 never had
-                     // problem with this, probably fine this way?
+  subr->header.minargs = minargs;
+  subr->header.maxargs = maxargs;
+  subr->name = name;
   subr->function = fun;
-  subr->minargs = minargs;
-  subr->maxargs = maxargs;
 
   return box_subr (subr);
 }
@@ -351,8 +350,8 @@ make_lambda (int minargs, int maxargs, Lisp_Object env, Lisp_Object *args,
       lambda = heaploballoc (allocsize);
     }
 
-  lambda->minargs = minargs;
-  lambda->maxargs = maxargs;
+  lambda->header.minargs = minargs;
+  lambda->header.maxargs = maxargs;
   lambda->env = env;
   for (int i = 0; i < maxargs; i++)
     lambda->args[i] = args[i];
@@ -427,7 +426,7 @@ gcmarkobj (Lisp_Object obj)
       gcmarkobj (unbox_symbol (obj)->value);
       break;
     case LISP_LMBD:
-      if (is_small_lambda (unbox_lambda (obj)->maxargs))
+      if (is_small_lambda (unbox_lambda (obj)->header.maxargs))
         {
           if (!blkgcmark (heap->smalllambdas, unbox_lambda (obj)))
             break;
@@ -439,7 +438,7 @@ gcmarkobj (Lisp_Object obj)
         }
       gcmarkobj (unbox_lambda (obj)->form);
       gcmarkobj (unbox_lambda (obj)->env);
-      for (int i = 0; i < unbox_lambda (obj)->maxargs; i++)
+      for (int i = 0; i < unbox_lambda (obj)->header.maxargs; i++)
         gcmarkobj (unbox_lambda (obj)->args[i]);
       break;
     case LISP_CONS:
