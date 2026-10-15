@@ -1,2 +1,13 @@
-(define (prelude-works?)
-  (format t "yes it works!"))
+(define (qq-expand x)
+  (cond
+   ((nil? (cons? x))
+    (cons 'quote (cons x nil)))
+   ((eq? (car x) 'unquote)
+    (car (cdr x)))
+   ((and (cons? (car x)) (eq? (car (car x)) 'unquote-splicing))
+    (cons 'append (cons (car (cdr (car x))) (cons (qq-expand (cdr x)) nil))))
+   (t
+    (cons 'cons (cons (qq-expand (car x)) (cons (qq-expand (cdr x)) nil))))))
+
+(defmacro (quasiquote x)
+    (qq-expand x))

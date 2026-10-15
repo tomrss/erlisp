@@ -151,6 +151,11 @@ static TestResult test_builtins_condition_case_rethrow ();
 static TestResult test_builtins_condition_case_unwind ();
 static TestResult test_builtins_condition_case_handlers ();
 static TestResult test_builtins_condition_case_gc ();
+static TestResult test_builtins_append ();
+static TestResult test_builtins_defmacro ();
+static TestResult test_builtins_defmacro_error ();
+static TestResult test_builtins_quasiquote ();
+static TestResult test_builtins_quasiquote_macro ();
 
 static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "car cdr", .run = test_builtins_car_cdr },
@@ -224,6 +229,11 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "cond-case unwind", .run = test_builtins_condition_case_unwind },
   { .skip = 0, .name = "cond-case handlers", .run = test_builtins_condition_case_handlers },
   { .skip = 0, .name = "cond-case gc", .run = test_builtins_condition_case_gc },
+  { .skip = 0, .name = "append", .run = test_builtins_append },
+  { .skip = 0, .name = "defmacro", .run = test_builtins_defmacro },
+  { .skip = 0, .name = "defmacro error", .run = test_builtins_defmacro_error },
+  { .skip = 0, .name = "quasiquote", .run = test_builtins_quasiquote },
+  { .skip = 0, .name = "quasiquote macro", .run = test_builtins_quasiquote_macro },
   {}, // terminator
 };
 
@@ -248,7 +258,8 @@ parse_src (const char *src)
 static int
 eval_src (const char *src, Lisp_Object *out)
 {
-  return safe_eval (l_globalenv, parse_src (src), out);
+  // like load and the repl: macroexpand, then eval
+  return condition_case_2 (eval_toplevel, l_globalenv, parse_src (src), out);
 }
 
 static int
@@ -1558,5 +1569,138 @@ test_builtins_condition_case_gc ()
                "  (cc-other 'other)"
                "  (cc-boom (car (cons 'ok nil))))",
                "ok");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_append ()
+{
+  EXPECT_FORM ("(append '(1 2) '(3 4))", "(1 2 3 4)");
+  EXPECT_FORM ("(append nil '(1))", "(1)");
+  EXPECT_FORM ("(append '(1) nil)", "(1)");
+  EXPECT_FORM ("(append nil nil)", "nil");
+  // the last argument can be anything, like in other lisps
+  EXPECT_FORM ("(append '(1) 2)", "(1 . 2)");
+
+  // the first list is copied, the second is shared
+  EXPECT_NO_ERROR_SRC ("(define app-l '(1 2))");
+  EXPECT_NO_ERROR_SRC ("(define app-r '(3))");
+  EXPECT_NO_ERROR_SRC ("(define app-res (append app-l app-r))");
+  EXPECT_NO_ERROR_SRC ("(setcar app-res 9)");
+  EXPECT_INT ("(car app-l)", 1);
+  EXPECT_FORM ("(eq? (cdr (cdr app-res)) app-r)", "t");
+
+  EXPECT_ERROR ("(append 1 '(2))", q_error_type);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_defmacro ()
+{
+  // args reach the macro unevaluated, then the expansion is evaluated
+  EXPECT_NO_ERROR_SRC ("(defmacro (mac-if c a b)"
+                       "  (cons 'if (cons c (cons a (cons b nil)))))");
+  EXPECT_INT ("(mac-if t 1 2)", 1);
+  EXPECT_INT ("(mac-if nil 1 2)", 2);
+  // only the taken branch is evaluated, the other one would fail
+  EXPECT_INT ("(mac-if t 1 (car 1))", 1);
+
+  EXPECT_NO_ERROR_SRC ("(defmacro (mac-quote x) (cons 'quote (cons x nil)))");
+  EXPECT_FORM ("(mac-quote (a b))", "(a b)");
+
+  // no args
+  EXPECT_NO_ERROR_SRC ("(defmacro (mac-zero) 42)");
+  EXPECT_INT ("(mac-zero)", 42);
+
+  // nested uses, and a macro expanding into another macro
+  EXPECT_INT ("(mac-if (mac-if t nil t) 1 2)", 2);
+  EXPECT_NO_ERROR_SRC ("(defmacro (mac-not x)"
+                       "  (cons 'mac-if (cons x (cons nil (cons t nil)))))");
+  EXPECT_FORM ("(mac-not nil)", "t");
+
+  // uses in a function body are expanded at definition
+  EXPECT_NO_ERROR_SRC ("(define (mac-user x) (mac-if x 10 20))");
+  EXPECT_INT ("(mac-user nil)", 20);
+
+  // eval expands too
+  EXPECT_INT ("(eval '(mac-if t 1 2))", 1);
+
+  // quoted data is not expanded
+  EXPECT_FORM ("'(mac-if t 1 2)", "(mac-if t 1 2)");
+
+  // macroexpand-1 expands one step, only if the head is a macro
+  EXPECT_FORM ("(macroexpand-1 '(mac-if t 1 2))", "(if t 1 2)");
+  EXPECT_FORM ("(macroexpand-1 '(mac-not x))", "(mac-if x nil t)");
+  EXPECT_FORM ("(macroexpand-1 '(car x))", "(car x)");
+  EXPECT_INT ("(macroexpand-1 1)", 1);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_defmacro_error ()
+{
+  EXPECT_NO_ERROR_SRC ("(defmacro (mac-two a b) a)");
+  // the macro lambda checks its arity at expansion
+  EXPECT_ERROR ("(mac-two 1)", q_error_funcargs);
+  // a macro is not a function, it cannot be applied at runtime
+  EXPECT_ERROR ("(apply mac-two '(1 2))", q_error_funcinvalid);
+
+  // the signature must be a list starting with a symbol
+  EXPECT_ERROR ("(defmacro mac-bad 1)", q_error_type);
+  EXPECT_ERROR ("(defmacro (1 x) x)", q_error_type);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_quasiquote ()
+{
+  EXPECT_NO_ERROR_SRC ("(define qq-x 42)");
+  EXPECT_NO_ERROR_SRC ("(define qq-l '(1 2))");
+
+  // the reader
+  EXPECT_FORM ("'`(a ,b ,@c)",
+               "(quasiquote (a (unquote b) (unquote-splicing c)))");
+
+  // without unquotes it is like quote
+  EXPECT_FORM ("`a", "a");
+  EXPECT_INT ("`1", 1);
+  EXPECT_FORM ("`()", "nil");
+  EXPECT_FORM ("`(a b)", "(a b)");
+
+  // unquote
+  EXPECT_INT ("`,qq-x", 42);
+  EXPECT_FORM ("`(a ,qq-x)", "(a 42)");
+  EXPECT_FORM ("`(a ,(+ qq-x 1))", "(a 43)");
+  EXPECT_FORM ("`((a ,qq-x) b)", "((a 42) b)");
+  EXPECT_FORM ("`(a . ,qq-x)", "(a . 42)");
+
+  // unquote-splicing
+  EXPECT_FORM ("`(a ,@qq-l b)", "(a 1 2 b)");
+  EXPECT_FORM ("`(,@qq-l)", "(1 2)");
+  EXPECT_FORM ("`(,@qq-l b)", "(1 2 b)");
+  EXPECT_FORM ("`(a ,@nil b)", "(a b)");
+  EXPECT_FORM ("`(a ,@qq-l ,qq-x)", "(a 1 2 42)");
+
+  // the spliced list is copied
+  EXPECT_NO_ERROR_SRC ("(define qq-r `(,@qq-l 3))");
+  EXPECT_NO_ERROR_SRC ("(setcar qq-r 9)");
+  EXPECT_INT ("(car qq-l)", 1);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_quasiquote_macro ()
+{
+  // macros written with backquote
+  EXPECT_NO_ERROR_SRC ("(defmacro (qq-swap a b) `(cons ,b ,a))");
+  EXPECT_FORM ("(qq-swap 1 2)", "(2 . 1)");
+
+  EXPECT_NO_ERROR_SRC ("(defmacro (qq-unless c body) `(if ,c nil ,body))");
+  EXPECT_INT ("(qq-unless nil 5)", 5);
+  EXPECT_FORM ("(qq-unless t (car 1))", "nil");
+
+  // splicing a list of forms into the expansion
+  EXPECT_NO_ERROR_SRC ("(defmacro (qq-progn forms) `(progn ,@forms))");
+  EXPECT_INT ("(qq-progn (1 2 3))", 3);
   return TEST_RESULT_SUCCESS;
 }

@@ -13,7 +13,7 @@
 static Lisp_Object
 read_eval (Lisp_Object line)
 {
-  return eval (env_current (), f_read (line));
+  return eval_toplevel (env_current (), f_read (line));
 }
 
 int

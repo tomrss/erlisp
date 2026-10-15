@@ -15,6 +15,9 @@ struct handler
 {
   jmp_buf jmp;
   int stackind;
+  // gc inhibit level to restore after a longjmp, e.g. from an error
+  // raised during macro expansion
+  int gcinhibit;
   Lisp_Object error;
 };
 
@@ -30,6 +33,7 @@ push_handler (int stackind)
   struct handler *h = &handlers[handlerdepth++];
   h->error = q_nil;
   h->stackind = stackind;
+  h->gcinhibit = gc_inhibit_level ();
   return h;
 }
 
@@ -50,6 +54,17 @@ handlers_walk (void (*fun) (Lisp_Object))
 {
   for (int i = handlerdepth - 1; i >= 0; i--)
     fun (handlers[i].error);
+}
+
+Lisp_Object
+eval_toplevel (Lisp_Object env, Lisp_Object form)
+{
+  // the expander keeps partial results in C locals while running macro
+  // code, which can trigger a gc: no gc during expansion
+  gc_inhibit ();
+  form = macroexpand_all (form);
+  gc_allow ();
+  return eval (env, form);
 }
 
 Lisp_Object
@@ -119,8 +134,8 @@ eval_symbol (Lisp_Object env, Lisp_Object symbol)
   unbound_error (symbol);
 }
 
-Lisp_Object
-apply (Lisp_Object fun, int nargs, Lisp_Object *args)
+static Lisp_Object
+apply_internal (Lisp_Object fun, int nargs, Lisp_Object *args)
 {
   if (!lambdap (fun) && !subrp (fun))
     invalidfunc_error (fun);
@@ -159,6 +174,34 @@ apply (Lisp_Object fun, int nargs, Lisp_Object *args)
 }
 
 Lisp_Object
+apply (Lisp_Object env, Lisp_Object fun, Lisp_Object args)
+{
+  int nargs = unbox_int (f_length (args));
+  Lisp_Object *aargs = alloca (nargs * sizeof (Lisp_Object));
+
+  Lisp_Object tail = args;
+  int i = 0;
+  while (!nil (tail))
+    {
+      aargs[i] = f_car (tail);
+      tail = f_cdr (tail);
+      i++;
+    }
+
+  stack_push ((struct stackframe){
+      .fname = "anonymous",
+      .env = env,
+      .form = q_nil,
+      .argvals = aargs,
+      .nargs = nargs,
+      .keepalive = fun,
+  });
+  Lisp_Object res = apply_internal (fun, nargs, aargs);
+  stack_pop ();
+  return res;
+}
+
+Lisp_Object
 call_function (Lisp_Object env, Lisp_Object form)
 {
   Lisp_Object funyielding = f_car (form);
@@ -187,7 +230,11 @@ call_function (Lisp_Object env, Lisp_Object form)
             "Lambda cannot have unevalled args; fexpr not supported");
 
       stack_push ((struct stackframe){
-          .fname = fname, .env = env, .form = form, .nargs = 0 });
+          .fname = fname,
+          .env = env,
+          .form = form,
+          .nargs = 0,
+      });
 
       // gc is orrible here, but here all roots are protected
       // TODO find an elegand solution to this horror
@@ -207,11 +254,13 @@ call_function (Lisp_Object env, Lisp_Object form)
   for (int i = 0; i < nargs; i++)
     argvals[i] = q_nil;
 
-  stack_push ((struct stackframe){ .fname = fname,
-                                   .env = env,
-                                   .form = form,
-                                   .argvals = argvals,
-                                   .nargs = nargs });
+  stack_push ((struct stackframe){
+      .fname = fname,
+      .env = env,
+      .form = form,
+      .argvals = argvals,
+      .nargs = nargs,
+  });
 
   // gc is orrible here, but here all roots are protected
   // TODO find an elegand solution to this horror
@@ -225,7 +274,7 @@ call_function (Lisp_Object env, Lisp_Object form)
       argtail = f_cdr (argtail);
     }
 
-  Lisp_Object result = apply (fun, nargs, argvals);
+  Lisp_Object result = apply_internal (fun, nargs, argvals);
 
   stack_pop ();
 
@@ -355,38 +404,133 @@ Lisp_Object
 define (Lisp_Object env, Lisp_Object form)
 {
   Lisp_Object var = f_car (form);
+  check_type (var, LISP_SYMB);
 
-  Lisp_Object symbol;
-  Lisp_Object value;
-  if (symbolp (var))
-    {
-      symbol = var;
-      value = eval (env, f_car (f_cdr (form)));
-    }
-  else if (listp (var))
-    {
-      // this is the shortened form:
-      // (define (f arg) (body)) instead of (define f (lambda (arg) (body)))
-      // . once we have macroexpand, it will handle this cleanly
-      symbol = f_car (var);
-      check_type (symbol, LISP_SYMB);
-      value = f_lambda (f_cons (f_cdr (var), f_cdr (form)));
-    }
-  else
-    type_error_2 (var, LISP_SYMB, LISP_CONS);
+  Lisp_Object value = eval (env, f_car (f_cdr (form)));
 
   if (eq (env, l_globalenv))
     {
       // top level: define in global
-      unbox_symbol (symbol)->value = value;
+      unbox_symbol (var)->value = value;
     }
   else
     {
-      unbox_symbol (symbol)->localbound = 1;
-      env_define (env, symbol, value);
+      unbox_symbol (var)->localbound = 1;
+      env_define (env, var, value);
     }
 
   return value;
+}
+
+static inline Lisp_Object
+expand_list (Lisp_Object form)
+{
+  if (nil (form))
+    return macroexpand_all (form);
+  return f_cons (macroexpand_all (f_car (form)), expand_list (f_cdr (form)));
+}
+
+static inline Lisp_Object
+expand_define (Lisp_Object form)
+{
+  Lisp_Object defineform = f_cdr (form);
+  Lisp_Object var = f_car (defineform);
+
+  if (!consp (var))
+    // normal form of define
+    return expand_list (form);
+
+  // shortened form for defining functions:
+  // (define (f arg) (body)) instead of (define f (lambda (arg) (body)))
+
+  Lisp_Object symbol = f_car (var);
+  Lisp_Object args = f_cdr (var);
+  Lisp_Object body = f_cdr (defineform);
+
+  Lisp_Object lambdaform = expand_list (body);
+  lambdaform = f_cons (args, lambdaform);
+  lambdaform = f_cons (q_lambda, lambdaform);
+  Lisp_Object expanded = q_nil;
+  expanded = f_cons (lambdaform, expanded);
+  expanded = f_cons (symbol, expanded);
+  expanded = f_cons (q_define, expanded);
+
+  return expanded;
+}
+
+static inline Lisp_Object
+expand_defmacro (Lisp_Object form)
+{
+  Lisp_Object defmacroform = f_cdr (form);
+  Lisp_Object var = f_car (defmacroform);
+
+  check_type (var, LISP_CONS);
+
+  Lisp_Object symbol = f_car (var);
+  Lisp_Object args = f_cdr (var);
+  Lisp_Object body = f_cdr (defmacroform);
+  check_type (symbol, LISP_SYMB);
+  check_type (body, LISP_CONS);
+
+  Lisp_Object lambdaform = expand_list (body);
+  lambdaform = f_cons (args, lambdaform);
+  lambdaform = f_cons (q_lambda, lambdaform);
+
+  // (define name (cons (quote macro) (lambda args . body)))
+  Lisp_Object quoted = list2 (q_quote, q_macro);
+  Lisp_Object value = list3 (q_cons, quoted, lambdaform);
+  return list3 (q_define, symbol, value);
+}
+
+static inline Lisp_Object
+macro_object (Lisp_Object symbol)
+{
+  if (!symbolp (symbol))
+    return q_nil;
+  // macro is only global, accessing with ->value works
+  Lisp_Object macro = unbox_symbol (symbol)->value;
+  // macro form is: '(macro . (lambda (args) body))
+  if (consp (macro) && eq (f_car (macro), q_macro) && lambdap (f_cdr (macro)))
+    return macro;
+  return q_nil;
+}
+
+Lisp_Object
+macroexpand_all (Lisp_Object form)
+{
+  if (!consp (form))
+    return form;
+
+  Lisp_Object head = f_car (form);
+
+  if (eq (head, q_quote))
+    return form;
+  if (eq (head, q_define))
+    return expand_define (form);
+  if (eq (head, q_defmacro))
+    return expand_defmacro (form);
+  if (!nil (macro_object (head)))
+    return macroexpand_all (macroexpand_1 (form));
+
+  // if, progn, unwind-protect and plain applications: every element
+  // is code (including the head, for ((lambda ...) x))
+  return expand_list (form);
+}
+
+Lisp_Object
+macroexpand_1 (Lisp_Object form)
+{
+  if (!consp (form))
+    return form;
+
+  Lisp_Object macrosym = f_car (form);
+  Lisp_Object macro = macro_object (macrosym);
+  Lisp_Object macrofun = f_cdr (macro);
+  if (nil (macrofun))
+    return form;
+
+  Lisp_Object macroargs = f_cdr (form);
+  return apply (l_globalenv, macrofun, macroargs);
 }
 
 static inline void
@@ -465,6 +609,7 @@ condition_case_0 (Lisp_Object (*fun) (), Lisp_Object *out)
   if (setjmp (h->jmp))
     {
       *out = h->error;
+      gc_inhibit_set_level (h->gcinhibit);
       pop_handler ();
       return 0;
     }
@@ -485,6 +630,7 @@ condition_case_1 (Lisp_Object (*fun) (Lisp_Object), Lisp_Object arg1,
   if (setjmp (h->jmp))
     {
       *out = h->error;
+      gc_inhibit_set_level (h->gcinhibit);
       pop_handler ();
       return 0;
     }
@@ -505,6 +651,7 @@ condition_case_2 (Lisp_Object (*fun) (Lisp_Object, Lisp_Object),
   if (setjmp (h->jmp))
     {
       *out = h->error;
+      gc_inhibit_set_level (h->gcinhibit);
       pop_handler ();
       return 0;
     }
@@ -525,6 +672,7 @@ condition_case_n (Lisp_Object (*fun) (int, Lisp_Object *), int nargs,
   if (setjmp (h->jmp))
     {
       *out = h->error;
+      gc_inhibit_set_level (h->gcinhibit);
       pop_handler ();
       return 0;
     }

@@ -372,9 +372,38 @@ defsubr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
   return symb;
 }
 
+static int gcinhibit = 0;
+
+void
+gc_inhibit ()
+{
+  gcinhibit++;
+}
+
+void
+gc_allow ()
+{
+  gcinhibit--;
+}
+
+int
+gc_inhibit_level ()
+{
+  return gcinhibit;
+}
+
+void
+gc_inhibit_set_level (int level)
+{
+  gcinhibit = level;
+}
+
 int
 gc_maybe ()
 {
+  if (gcinhibit > 0)
+    return 0;
+
   // TODO defines
   const float growthreshold = 5.;
   const size_t minheap = PAGE_SIZE * 32;

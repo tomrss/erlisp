@@ -28,7 +28,14 @@
 
 (define-derived-mode erlisp-mode
   scheme-mode "Erlisp"
-  "Major mode for Erlisp.")
+  "Major mode for Erlisp."
+  (font-lock-add-keywords
+   nil
+   '(("(\\(defmacro\\)\\_>\\s-*\\(\\(?:\\sw\\|\\s_\\)+\\)?"
+      (1 font-lock-keyword-face)
+      (2 font-lock-function-name-face nil t)))))
+
+(put 'defmacro 'scheme-indent-function 2)
 
 (add-to-list 'auto-mode-alist '("\\.erlisp\\'" . erlisp-mode))
 

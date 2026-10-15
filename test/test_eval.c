@@ -1,9 +1,9 @@
 #include "../src/alloc.h"
-#include "../src/print.h"
 #include "../src/env.h"
 #include "../src/eval.h"
 #include "../src/lisp.h"
 #include "../src/obarray.h"
+#include "../src/print.h"
 #include "test_lib.h"
 #include <stdarg.h>
 #include <stdio.h>
@@ -32,6 +32,7 @@ static TestResult test_eval_setq_unbound ();
 static TestResult test_eval_lexical_inner_define ();
 static TestResult test_eval_lexical_gc_caller_locals ();
 static TestResult test_eval_lexical_head_eval ();
+static TestResult test_expand_define ();
 
 // name of the error symbol, for failure messages
 static const char *errname (Lisp_Object err);
@@ -68,6 +69,7 @@ static TestCase test_eval_cases[] = {
     .name = "lex gc locals",
     .run = test_eval_lexical_gc_caller_locals },
   { .skip = 0, .name = "lex head eval", .run = test_eval_lexical_head_eval },
+  { .skip = 0, .name = "expand define", .run = test_expand_define },
   {}, // terminator
 };
 
@@ -768,9 +770,9 @@ test_eval_setq_unbound ()
   Lisp_Object m = make_str_symbol ("m");
   Lisp_Object w = make_str_symbol ("w");
 
-  Lisp_Object inner = mklist (
-      3, sym ("let"), mklist (1, mklist (2, m, box_int (2))),
-      mklist (3, sym ("set!"), n, mklist (3, sym ("+"), n, m)));
+  Lisp_Object inner
+      = mklist (3, sym ("let"), mklist (1, mklist (2, m, box_int (2))),
+                mklist (3, sym ("set!"), n, mklist (3, sym ("+"), n, m)));
   Lisp_Object form = mklist (4, sym ("let"),
                              mklist (1, mklist (2, n, box_int (1))), inner, n);
 
@@ -965,6 +967,36 @@ test_eval_lexical_head_eval ()
   TEST_CHECK_TYPE ("result", res, LISP_INTG);
   TEST_ASSERT (unbox_int (res) == 21, "expected %d, got %ld", 21,
                unbox_int (res));
+
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_expand_define ()
+{
+  /*
+    The short form of define is rewritten by the expander:
+
+    (define (f a) a)
+      ---> (define f (lambda (a) a))
+   */
+  Lisp_Object f = make_str_symbol ("f");
+  Lisp_Object a = make_str_symbol ("a");
+
+  Lisp_Object form = mklist (3, sym ("define"), mklist (2, f, a), a);
+  Lisp_Object expected
+      = mklist (3, sym ("define"), f,
+                mklist (3, sym ("lambda"), mklist (1, a), a));
+
+  Lisp_Object res = macroexpand_all (form);
+  TEST_ASSERT (eq (f_equal_p (res, expected), q_t),
+               "unexpected expansion of short define");
+
+  // the normal form is left as it is
+  Lisp_Object normal = mklist (3, sym ("define"), f, box_int (1));
+  res = macroexpand_all (normal);
+  TEST_ASSERT (eq (f_equal_p (res, normal), q_t),
+               "unexpected expansion of normal define");
 
   return TEST_RESULT_SUCCESS;
 }

@@ -466,11 +466,13 @@ Lisp_Object f_null_p (Lisp_Object o);
 Lisp_Object f_setq (Lisp_Object form);
 Lisp_Object f_eval (Lisp_Object form);
 Lisp_Object f_apply (Lisp_Object fun, Lisp_Object args);
+Lisp_Object f_macroexpand_1 (Lisp_Object form);
 Lisp_Object f_assoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_assq (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_rassoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_rassq (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_memq (Lisp_Object elt, Lisp_Object list);
+Lisp_Object f_append (Lisp_Object list, Lisp_Object o);
 Lisp_Object f_string_equal_p (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_string_length (Lisp_Object string);
 Lisp_Object f_number_to_string (Lisp_Object number);
@@ -537,6 +539,15 @@ extern Lisp_Object q_nil;
 extern Lisp_Object q_t;
 extern Lisp_Object q_unbound;
 extern Lisp_Object q_eof;
+extern Lisp_Object q_quote;
+extern Lisp_Object q_quasiquote;
+extern Lisp_Object q_unquote;
+extern Lisp_Object q_unquote_splicing;
+extern Lisp_Object q_lambda;
+extern Lisp_Object q_define;
+extern Lisp_Object q_defmacro;
+extern Lisp_Object q_macro;
+extern Lisp_Object q_cons;
 extern Lisp_Object q_error;
 extern Lisp_Object q_error_arith;
 extern Lisp_Object q_error_file;
@@ -662,6 +673,18 @@ static inline const char *
 symbol_name (Lisp_Object s)
 {
   return unbox_string (unbox_symbol (s)->name)->data;
+}
+
+static inline Lisp_Object
+list2 (Lisp_Object a, Lisp_Object b)
+{
+  return f_cons (a, f_cons (b, q_nil));
+}
+
+static inline Lisp_Object
+list3 (Lisp_Object a, Lisp_Object b, Lisp_Object c)
+{
+  return f_cons (a, f_cons (b, f_cons (c, q_nil)));
 }
 
 #endif // LISP_H
