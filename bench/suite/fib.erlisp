@@ -1,0 +1,12 @@
+;;;;; fib: function calls and integer arithmetic
+;;
+;; tree recursion, no allocation: ~1.6M calls. measures the cost of a
+;; call (frame push, argument binding, env lookup) and of the builtins
+;; <, + and -.
+
+(define (fib n)
+  (if (< n 2)
+      n
+      (+ (fib (- n 1)) (fib (- n 2)))))
+
+(format t (number->string (fib 30)))

@@ -1,0 +1,22 @@
+;;;;; alloc-churn: short lived conses, tiny live set
+;;
+;; 20 * 40 * 40 lists of 100 conses, each one dropped right away:
+;; 3.2M conses of garbage. measures raw allocation and sweep speed.
+
+;; list of n integers: exactly n conses (integers are immediate)
+(define (make-list n)
+  (if (< n 1)
+      nil
+      (cons n (make-list (- n 1)))))
+
+;; sum of the results of n calls of (f)
+(define (sum-times n f)
+  (if (< n 1)
+      0
+      (+ (f) (sum-times (- n 1) f))))
+
+(format t (number->string
+           (sum-times 20 (lambda ()
+             (sum-times 40 (lambda ()
+               (sum-times 40 (lambda ()
+                 (length (make-list 100))))))))))

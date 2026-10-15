@@ -1,0 +1,62 @@
+;;;;; closures: higher order functions and captured state
+;;
+;; 2000 rounds of map/filter/fold over a 100 element list, with fresh
+;; closures made every round and a counter mutated through set! on a
+;; captured variable. measures closure creation, calls through a
+;; variable and lookup of captured bindings.
+
+;; list of n integers: exactly n conses (integers are immediate)
+(define (make-list n)
+  (if (< n 1)
+      nil
+      (cons n (make-list (- n 1)))))
+
+;; sum of the results of n calls of (f)
+(define (sum-times n f)
+  (if (< n 1)
+      0
+      (+ (f) (sum-times (- n 1) f))))
+
+(define (map f l)
+  (if (nil? l)
+      nil
+      (cons (f (car l)) (map f (cdr l)))))
+
+(define (filter p l)
+  (cond ((nil? l) nil)
+        ((p (car l)) (cons (car l) (filter p (cdr l))))
+        (t (filter p (cdr l)))))
+
+(define (fold f acc l)
+  (if (nil? l)
+      acc
+      (fold f (f acc (car l)) (cdr l))))
+
+(define (make-adder k)
+  (lambda (x) (+ x k)))
+
+(define (compose f g)
+  (lambda (x) (f (g x))))
+
+(define (make-counter)
+  (let ((n 0))
+    (lambda () (progn (set! n (+ n 1)) n))))
+
+(define (even? n)
+  (= n (* 2 (/ n 2))))
+
+(define xs (make-list 100))
+(define tick (make-counter))
+
+(define (round k)
+  (let ((f (compose (make-adder k) (make-adder 1))))
+    (fold (lambda (acc x) (progn (tick) (+ acc x)))
+          0
+          (filter even? (map f xs)))))
+
+(define total
+  (sum-times 20 (lambda ()
+    (sum-times 100 (lambda ()
+      (round (tick)))))))
+
+(format t (concat (number->string total) " " (number->string (tick))))

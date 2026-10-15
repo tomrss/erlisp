@@ -1,0 +1,60 @@
+;;;;; alloc-frag: allocation in a fragmented heap
+;;
+;; a live set of ~1.6M conses, then every other cons is unlinked in
+;; place, so free blocks are scattered in every page; then 3.2M conses
+;; of churn. measures allocation after a gc, in holes.
+
+;; list of n integers: exactly n conses (integers are immediate)
+(define (make-list n)
+  (if (< n 1)
+      nil
+      (cons n (make-list (- n 1)))))
+
+;; list of the results of n calls of (f)
+(define (collect n f)
+  (if (< n 1)
+      nil
+      (cons (f) (collect (- n 1) f))))
+
+;; sum of the results of n calls of (f)
+(define (sum-times n f)
+  (if (< n 1)
+      0
+      (+ (f) (sum-times (- n 1) f))))
+
+;; sum of (f x) for every x in l
+(define (sum-map f l)
+  (if (nil? l)
+      0
+      (+ (f (car l)) (sum-map f (cdr l)))))
+
+;; unlink every other cons of l in place: no allocation, the unlinked
+;; conses become garbage scattered among the live ones. returns the
+;; new length of l
+(define (prune! l)
+  (if (and l (cdr l))
+      (progn (setcdr l (cddr l)) (+ 1 (prune! (cdr l))))
+      (length l)))
+
+(define keep
+  (collect 10 (lambda ()
+    (collect 40 (lambda ()
+      (collect 40 (lambda ()
+        (make-list 100))))))))
+
+(define kept
+  (sum-map (lambda (l1)
+             (sum-map (lambda (l2)
+                        (sum-map prune! l2))
+                      l1))
+           keep))
+
+(gc)
+
+(define churned
+  (sum-times 20 (lambda ()
+    (sum-times 40 (lambda ()
+      (sum-times 40 (lambda ()
+        (length (make-list 100)))))))))
+
+(format t (concat (number->string kept) " " (number->string churned)))

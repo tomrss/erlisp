@@ -1,0 +1,19 @@
+;;;;; tak: function calls with three arguments (Gabriel)
+;;
+;; (tak 18 12 6) makes 63609 calls, repeated 30 times: ~1.9M calls.
+;; like fib but more arguments per call and calls nested as arguments.
+
+(define (tak x y z)
+  (if (< y x)
+      (tak (tak (- x 1) y z)
+           (tak (- y 1) z x)
+           (tak (- z 1) x y))
+      z))
+
+;; sum of the results of n calls of (f)
+(define (sum-times n f)
+  (if (< n 1)
+      0
+      (+ (f) (sum-times (- n 1) f))))
+
+(format t (number->string (sum-times 30 (lambda () (tak 18 12 6)))))

@@ -1,0 +1,48 @@
+;;;;; strings: string building and string ports
+;;
+;; 2000 rounds: build a line of 50 numbers with number->string and
+;; concat, copy it char by char through a string input port into a
+;; string output port, parse numbers back with string->number. measures
+;; string allocation (variable size objects) and the port machinery.
+;;
+;; copy is recursive per char: lines are kept short for the stack.
+
+;; "n n-1 ... 1 "
+(define (build-line n)
+  (if (< n 1)
+      ""
+      (concat (number->string n) " " (build-line (- n 1)))))
+
+(define (copy in out)
+  (let ((c (read-char in)))
+    (if (eof-object? c)
+        nil
+        (progn (write-char c out) (copy in out)))))
+
+(define (copy-string s)
+  (let ((out (open-output-string)))
+    (progn (copy (open-input-string s) out)
+           (get-output-string out))))
+
+;; sum of n, n-1 ... 1 through number->string and back
+(define (roundtrip n)
+  (if (< n 1)
+      0
+      (+ (string->number (number->string n)) (roundtrip (- n 1)))))
+
+;; sum of the results of n calls of (f)
+(define (sum-times n f)
+  (if (< n 1)
+      0
+      (+ (f) (sum-times (- n 1) f))))
+
+(define (round)
+  (+ (string-length (copy-string (build-line 50)))
+     (roundtrip 50)))
+
+;; 20 * 10 * 10 rounds: sum-times is not a tail call, nesting keeps the
+;; stack shallow so copy has room
+(format t (number->string
+           (sum-times 20 (lambda ()
+             (sum-times 10 (lambda ()
+               (sum-times 10 round)))))))

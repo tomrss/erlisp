@@ -1,0 +1,41 @@
+;;;;; alloc-live: a big live set
+;;
+;; 10 * 40 * 40 lists of 100 conses kept alive in a global: ~1.6M
+;; conses, then a few full gcs. measures memory overhead per block (look
+;; at the RSS) and mark cost.
+
+;; list of n integers: exactly n conses (integers are immediate)
+(define (make-list n)
+  (if (< n 1)
+      nil
+      (cons n (make-list (- n 1)))))
+
+;; list of the results of n calls of (f)
+(define (collect n f)
+  (if (< n 1)
+      nil
+      (cons (f) (collect (- n 1) f))))
+
+;; sum of (f x) for every x in l
+(define (sum-map f l)
+  (if (nil? l)
+      0
+      (+ (f (car l)) (sum-map f (cdr l)))))
+
+(define keep
+  (collect 10 (lambda ()
+    (collect 40 (lambda ()
+      (collect 40 (lambda ()
+        (make-list 100))))))))
+
+(gc)
+(gc)
+(gc)
+
+;; walk the live set: it must still be all there
+(format t (number->string
+           (sum-map (lambda (l1)
+                      (sum-map (lambda (l2)
+                                 (sum-map length l2))
+                               l1))
+                    keep)))

@@ -1,0 +1,44 @@
+;;;;; nqueens: backtracking search
+;;
+;; all the solutions of the 8 queens problem (92), 20 times. branchy
+;; recursion, boolean logic with and, short lived lists from append and
+;; cons.
+
+(define (iota1 n)
+  (if (< n 1)
+      nil
+      (cons n (iota1 (- n 1)))))
+
+(define (append a b)
+  (if (nil? a)
+      b
+      (cons (car a) (append (cdr a) b))))
+
+;; sum of the results of n calls of (f)
+(define (sum-times n f)
+  (if (< n 1)
+      0
+      (+ (f) (sum-times (- n 1) f))))
+
+;; can a queen go in row, given the queens already placed? dist is the
+;; column distance from the first one in placed
+(define (ok? row dist placed)
+  (if (nil? placed)
+      t
+      (and (nil? (= (car placed) (+ row dist)))
+           (nil? (= (car placed) (- row dist)))
+           (ok? row (+ dist 1) (cdr placed)))))
+
+;; x: rows still to try, y: rows skipped in this column, z: placed
+(define (try x y z)
+  (if (nil? x)
+      (if (nil? y) 1 0)
+      (+ (if (ok? (car x) 1 z)
+             (try (append (cdr x) y) nil (cons (car x) z))
+             0)
+         (try (cdr x) (cons (car x) y) z))))
+
+(define (queens n)
+  (try (iota1 n) nil nil))
+
+(format t (number->string (sum-times 20 (lambda () (queens 8)))))

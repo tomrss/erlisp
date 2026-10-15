@@ -1,0 +1,45 @@
+;;;;; deriv: symbolic differentiation (Gabriel)
+;;
+;; derivative of a small polynomial, 20000 times. lots of small lists
+;; built with cons, dispatch on symbols with cond and eq?. a typical
+;; "lisp program" workload: mixed calls, allocation and list walking.
+;; only + - * are handled, the expression has nothing else.
+
+(define (list3 a b c)
+  (cons a (cons b (cons c nil))))
+
+(define (map f l)
+  (if (nil? l)
+      nil
+      (cons (f (car l)) (map f (cdr l)))))
+
+;; sum of the results of n calls of (f)
+(define (sum-times n f)
+  (if (< n 1)
+      0
+      (+ (f) (sum-times (- n 1) f))))
+
+;; number of atoms in a tree
+(define (size x)
+  (if (cons? x)
+      (+ (size (car x)) (size (cdr x)))
+      1))
+
+(define (deriv-aux a)
+  (list3 '/ (deriv a) a))
+
+(define (deriv a)
+  (cond ((nil? (cons? a)) (if (eq? a 'x) 1 0))
+        ((eq? (car a) '+) (cons '+ (map deriv (cdr a))))
+        ((eq? (car a) '-) (cons '- (map deriv (cdr a))))
+        ((eq? (car a) '*) (list3 '* a (cons '+ (map deriv-aux (cdr a)))))
+        (t 'error)))
+
+(define expr '(+ (* 3 x x) (* a x x) (* b x) 5))
+
+(define total
+  (sum-times 200 (lambda ()
+    (sum-times 100 (lambda ()
+      (size (deriv expr)))))))
+
+(format t (number->string total))
