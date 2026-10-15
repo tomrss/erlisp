@@ -334,26 +334,27 @@ make_subr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 }
 
 Lisp_Object
-make_lambda (int minargs, int maxargs, Lisp_Object env, Lisp_Object *args,
-             Lisp_Object form)
+make_lambda (int minargs, int maxargs, int nargs, Lisp_Object env,
+             Lisp_Object *args, Lisp_Object form)
 {
   Lisp_Lambda *lambda;
   // TODO maybe use a lisp list args instead of c array?
-  if (is_small_lambda (maxargs))
+  if (is_small_lambda (nargs))
     {
       lambda = heapblkalloc (heap->smalllambdas);
     }
   else
     {
       // allocate in large object heap
-      size_t allocsize = sizeof (Lisp_Lambda) + maxargs * sizeof (Lisp_Object);
+      size_t allocsize = sizeof (Lisp_Lambda) + nargs * sizeof (Lisp_Object);
       lambda = heaploballoc (allocsize);
     }
 
   lambda->header.minargs = minargs;
   lambda->header.maxargs = maxargs;
   lambda->env = env;
-  for (int i = 0; i < maxargs; i++)
+  lambda->nargs = nargs;
+  for (int i = 0; i < nargs; i++)
     lambda->args[i] = args[i];
   lambda->form = form;
 
@@ -455,7 +456,7 @@ gcmarkobj (Lisp_Object obj)
       gcmarkobj (unbox_symbol (obj)->value);
       break;
     case LISP_LMBD:
-      if (is_small_lambda (unbox_lambda (obj)->header.maxargs))
+      if (is_small_lambda (unbox_lambda (obj)->nargs))
         {
           if (!blkgcmark (heap->smalllambdas, unbox_lambda (obj)))
             break;
@@ -467,7 +468,7 @@ gcmarkobj (Lisp_Object obj)
         }
       gcmarkobj (unbox_lambda (obj)->form);
       gcmarkobj (unbox_lambda (obj)->env);
-      for (int i = 0; i < unbox_lambda (obj)->header.maxargs; i++)
+      for (int i = 0; i < unbox_lambda (obj)->nargs; i++)
         gcmarkobj (unbox_lambda (obj)->args[i]);
       break;
     case LISP_CONS:

@@ -52,7 +52,10 @@ NORETURN static inline void
 funcargs_error (int minargs, int maxargs, int provided)
 {
   Lisp_Object data = f_cons (box_int (provided), q_nil);
-  data = f_cons (box_int (maxargs), data);
+  if (maxargs == MANY)
+    data = f_cons (f_intern (make_string ("many")), data);
+  else
+    data = f_cons (box_int (maxargs), data);
   data = f_cons (box_int (minargs), data);
   f_signal (q_error_funcargs, data);
 }

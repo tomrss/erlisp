@@ -10,7 +10,8 @@ Lisp_Object call_function (Lisp_Object env, Lisp_Object form);
 Lisp_Object call_subr (Lisp_Subr *usubr, int maxargs, int arity,
                        Lisp_Object *argvals);
 Lisp_Object call_unevalled_subr (Lisp_Subr *usubr, Lisp_Object form);
-Lisp_Object call_lambda (Lisp_Lambda *ulambda, Lisp_Object *argvals);
+Lisp_Object call_lambda (Lisp_Lambda *ulambda, int nargs,
+                         Lisp_Object *argvals);
 Lisp_Object apply (Lisp_Object env, Lisp_Object fun, Lisp_Object args);
 Lisp_Object progn (Lisp_Object env, Lisp_Object form);
 Lisp_Object let (Lisp_Object env, Lisp_Object form);

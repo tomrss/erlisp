@@ -811,11 +811,34 @@ f_lambda (Lisp_Object form)
   Lisp_Object args = f_car (form);
   Lisp_Object body = f_cdr (form);
 
-  size_t nargs = unbox_int (f_length (args));
-  Lisp_Object *argv = malloc (nargs * sizeof (Lisp_Object));
+  size_t argsize;
+  int minargs = 0;
+  int maxargs;
+  Lisp_Object tail = args;
+  while (consp (tail))
+    {
+      minargs++;
+      tail = f_cdr (tail);
+    }
+
+  if (nil (tail))
+    {
+      // no &rest arguments
+      argsize = maxargs = minargs;
+    }
+  else if (symbolp (tail))
+    {
+      // &rest arguments represented by symbol
+      maxargs = MANY;
+      argsize = minargs + 1;
+    }
+  else
+    type_error (tail, LISP_SYMB);
+
+  Lisp_Object *argv = malloc (argsize * sizeof (Lisp_Object));
 
   Lisp_Object argtail = args;
-  for (size_t i = 0; i < nargs; i++)
+  for (int i = 0; i < minargs; i++)
     {
       Lisp_Object argsym = f_car (argtail);
       check_type (argsym, LISP_SYMB);
@@ -826,9 +849,15 @@ f_lambda (Lisp_Object form)
       argv[i] = argsym;
       argtail = f_cdr (argtail);
     }
+  if (maxargs == MANY)
+    {
+      // fill last slot with rest argument
+      unbox_symbol (tail)->localbound = 1;
+      argv[minargs] = tail;
+    }
 
   // TODO &optional and &re st
-  return make_lambda (nargs, nargs, env_current (), argv, body);
+  return make_lambda (minargs, maxargs, argsize, env_current (), argv, body);
 }
 
 Lisp_Object

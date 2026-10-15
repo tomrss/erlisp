@@ -195,6 +195,7 @@ struct lisp_lambda
   struct lisp_callable_header header;
   Lisp_Object env;
   Lisp_Object form;
+  int nargs;
   Lisp_Object args[];
 };
 

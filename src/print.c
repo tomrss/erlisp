@@ -111,12 +111,19 @@ fprint_form (FILE *stream, Lisp_Object form)
                unbox_port (form)->closed ? ",closed" : "");
       break;
     case LISP_SUBR:
-      fprintf (stream, "['%s',%d,%d]", unbox_subr (form)->name,
-               unbox_subr (form)->header.minargs, unbox_subr (form)->header.maxargs);
+      fprintf (stream, "['%s',%d,", unbox_subr (form)->name,
+               unbox_subr (form)->header.minargs);
+      if (unbox_subr (form)->header.maxargs == MANY)
+        fprintf (stream, "many]");
+      else
+        fprintf (stream, "%d]", unbox_subr (form)->header.maxargs);
       break;
     case LISP_LMBD:
-      fprintf (stream, "[lambda,%d,%d]", unbox_lambda (form)->header.minargs,
-               unbox_lambda (form)->header.maxargs);
+      fprintf (stream, "[lambda,%d,", unbox_lambda (form)->header.minargs);
+      if (unbox_lambda (form)->header.maxargs == MANY)
+        fprintf (stream, "many]");
+      else
+        fprintf (stream, "%d]", unbox_lambda (form)->header.maxargs);
       break;
     case LISP_SYMB:
       fprintf (stream, "%.*s",

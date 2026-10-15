@@ -292,7 +292,7 @@ test_eval_lambda_2args ()
       f_cons (subrcons, f_cons (make_string ("not return"),
                                 f_cons (make_string ("this"), q_nil))),
       f_cons (f_cons (subrsum, f_cons (arg1, f_cons (arg2, q_nil))), q_nil));
-  lambda = make_lambda (2, 2, env, args, lambdabody);
+  lambda = make_lambda (2, 2, 2, env, args, lambdabody);
   lambdasym = make_str_symbol ("something");
   unbox_symbol (lambdasym)->value = lambda;
 
@@ -350,13 +350,13 @@ test_eval_lambda_nested ()
   Lisp_Object callstrlen = f_cons (subrstrlen, f_cons (fun1arg2, q_nil));
   fun1body = f_cons (
       f_cons (subrsum, f_cons (fun1arg1, f_cons (callstrlen, q_nil))), q_nil);
-  fun1lambda = make_lambda (2, 2, env_current (), fun1args, fun1body);
+  fun1lambda = make_lambda (2, 2, 2, env_current (), fun1args, fun1body);
   fun1sym = make_str_symbol ("fun1");
   unbox_symbol (fun1sym)->value = fun1lambda;
 
   fun2body = f_cons (
       f_cons (fun1sym, f_cons (box_int (3), f_cons (fun2arg1, q_nil))), q_nil);
-  fun2lambda = make_lambda (1, 1, env_current (), fun2args, fun2body);
+  fun2lambda = make_lambda (1, 1, 1, env_current (), fun2args, fun2body);
   fun2sym = make_str_symbol ("fun2");
   unbox_symbol (fun2sym)->value = fun2lambda;
 

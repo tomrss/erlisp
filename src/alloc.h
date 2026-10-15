@@ -46,7 +46,7 @@ Lisp_Object make_nstr_symbol (const char *s, size_t size);
 Lisp_Object make_cons (Lisp_Object car, Lisp_Object cdr);
 Lisp_Object make_subr (const char *name, int minargs, int maxargs,
                        union lisp_subr_fun fun);
-Lisp_Object make_lambda (int minargs, int maxargs, Lisp_Object env,
+Lisp_Object make_lambda (int minargs, int maxargs, int nargs, Lisp_Object env,
                          Lisp_Object *args, Lisp_Object form);
 Lisp_Object make_vector (size_t size);
 Lisp_Object make_file_port (FILE *f, Lisp_Port_Direction direction);

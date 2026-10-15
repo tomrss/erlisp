@@ -170,7 +170,7 @@ apply_internal (Lisp_Object fun, int nargs, Lisp_Object *args)
   if (subrp (fun))
     return call_subr (unbox_subr (fun), maxargs, arity, argvals);
   else // is lambda
-    return call_lambda (unbox_lambda (fun), argvals);
+    return call_lambda (unbox_lambda (fun), nargs, argvals);
 }
 
 Lisp_Object
@@ -333,15 +333,30 @@ call_subr (Lisp_Subr *usubr, int maxargs, int arity, Lisp_Object *argvals)
 }
 
 Lisp_Object
-call_lambda (Lisp_Lambda *ulambda, Lisp_Object *argvals)
+call_lambda (Lisp_Lambda *ulambda, int nargs, Lisp_Object *argvals)
 {
+  // TODO nargs, minargs, maxargs, arity, lambda->nargs, ... what a mess, please more consistent naming!!
+  int minargs = ulambda->header.minargs;
+  int maxargs = ulambda->header.maxargs;
   // create a new environment binding lambda arg symbols to actual values
   Lisp_Object env = env_new (ulambda->env);
-  for (int i = 0; i < ulambda->header.maxargs; i++)
+  for (int i = 0; i < minargs; i++)
     {
       Lisp_Object argsym = ulambda->args[i];
       Lisp_Object argval = argvals[i];
       env_define (env, argsym, argval);
+    }
+
+  if (maxargs == MANY)
+    {
+      // pack each argument after minargs in a lisp list
+      Lisp_Object restarg = q_nil;
+      for (int i = nargs - 1; i >= minargs; i--)
+          restarg = f_cons (argvals[i], restarg);
+
+      // bind the rest arg in the lambda last symbol
+      Lisp_Object argsym = ulambda->args[ulambda->nargs - 1];
+      env_define (env, argsym, restarg);
     }
 
   // set lambda env in current stack for protecting from GC.
@@ -483,6 +498,19 @@ expand_defmacro (Lisp_Object form)
 }
 
 static inline Lisp_Object
+expand_lambda (Lisp_Object form)
+{
+  // (lambda args . body): args are not code, expand only the body
+  Lisp_Object lambdaform = f_cdr (form);
+  Lisp_Object args = f_car (lambdaform);
+  Lisp_Object body = f_cdr (lambdaform);
+
+  lambdaform = expand_list (body);
+  lambdaform = f_cons (args, lambdaform);
+  return f_cons (q_lambda, lambdaform);
+}
+
+static inline Lisp_Object
 macro_object (Lisp_Object symbol)
 {
   if (!symbolp (symbol))
@@ -509,6 +537,8 @@ macroexpand_all (Lisp_Object form)
     return expand_define (form);
   if (eq (head, q_defmacro))
     return expand_defmacro (form);
+  if (eq (head, q_lambda))
+    return expand_lambda (form);
   if (!nil (macro_object (head)))
     return macroexpand_all (macroexpand_1 (form));
 

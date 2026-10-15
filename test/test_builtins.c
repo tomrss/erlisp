@@ -156,6 +156,10 @@ static TestResult test_builtins_defmacro ();
 static TestResult test_builtins_defmacro_error ();
 static TestResult test_builtins_quasiquote ();
 static TestResult test_builtins_quasiquote_macro ();
+static TestResult test_builtins_lambda_rest ();
+static TestResult test_builtins_define_rest ();
+static TestResult test_builtins_defmacro_rest ();
+static TestResult test_builtins_lambda_rest_error ();
 
 static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "car cdr", .run = test_builtins_car_cdr },
@@ -234,6 +238,10 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "defmacro error", .run = test_builtins_defmacro_error },
   { .skip = 0, .name = "quasiquote", .run = test_builtins_quasiquote },
   { .skip = 0, .name = "quasiquote macro", .run = test_builtins_quasiquote_macro },
+  { .skip = 0, .name = "lambda rest", .run = test_builtins_lambda_rest },
+  { .skip = 0, .name = "def rest", .run = test_builtins_define_rest },
+  { .skip = 0, .name = "defmacro rest", .run = test_builtins_defmacro_rest },
+  { .skip = 0, .name = "lambda rest error", .run = test_builtins_lambda_rest_error },
   {}, // terminator
 };
 
@@ -1702,5 +1710,93 @@ test_builtins_quasiquote_macro ()
   // splicing a list of forms into the expansion
   EXPECT_NO_ERROR_SRC ("(defmacro (qq-progn forms) `(progn ,@forms))");
   EXPECT_INT ("(qq-progn (1 2 3))", 3);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_lambda_rest ()
+{
+  // the extra args are collected in a list bound to the rest symbol
+  EXPECT_FORM ("((lambda (a . r) r) 1)", "nil");
+  EXPECT_FORM ("((lambda (a . r) r) 1 2 3)", "(2 3)");
+  EXPECT_INT ("((lambda (a . r) a) 1 2 3)", 1);
+  EXPECT_FORM ("((lambda (a b . r) (cons b r)) 1 2 3 4)", "(2 3 4)");
+
+  // a symbol instead of a list takes all the args
+  EXPECT_FORM ("((lambda r r))", "nil");
+  EXPECT_FORM ("((lambda r r) 1 2 3)", "(1 2 3)");
+
+  // the args are evaluated before being collected
+  EXPECT_FORM ("((lambda (a . r) r) 1 (+ 1 1) (car '(3)))", "(2 3)");
+
+  // apply spreads the list on required and rest args
+  EXPECT_FORM ("(apply (lambda (a . r) r) '(1 2 3))", "(2 3)");
+  EXPECT_FORM ("(apply (lambda r r) '(1 2))", "(1 2)");
+  EXPECT_FORM ("(apply (lambda r r) nil)", "nil");
+
+  // the rest list is fresh, not the list given to apply
+  EXPECT_NO_ERROR_SRC ("(define rest-l '(1 2))");
+  EXPECT_NO_ERROR_SRC ("(apply (lambda r (setcar r 9)) rest-l)");
+  EXPECT_INT ("(car rest-l)", 1);
+
+  // a closure captures the rest arg like any other arg
+  EXPECT_NO_ERROR_SRC ("(define rest-mk (lambda r (lambda () r)))");
+  EXPECT_FORM ("((rest-mk 1 2))", "(1 2)");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_define_rest ()
+{
+  // (define (f a . r) body) is (define f (lambda (a . r) body))
+  EXPECT_NO_ERROR_SRC ("(define (def-rest-f a . r) (cons a r))");
+  EXPECT_FORM ("(def-rest-f 1)", "(1)");
+  EXPECT_FORM ("(def-rest-f 1 2 3)", "(1 2 3)");
+
+  // (define (f . r) body) is (define f (lambda r body))
+  EXPECT_NO_ERROR_SRC ("(define (def-rest-all . r) r)");
+  EXPECT_FORM ("(def-rest-all)", "nil");
+  EXPECT_FORM ("(def-rest-all 1 2)", "(1 2)");
+
+  // recursion on the rest list
+  EXPECT_NO_ERROR_SRC ("(define (def-rest-sum . r)"
+                       "  (if r (+ (car r) (apply def-rest-sum (cdr r))) 0))");
+  EXPECT_INT ("(def-rest-sum)", 0);
+  EXPECT_INT ("(def-rest-sum 1 2 3 4)", 10);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_defmacro_rest ()
+{
+  // the rest arg collects the unevaluated forms
+  EXPECT_NO_ERROR_SRC ("(defmacro (mac-rest-when c . body)"
+                       "  `(if ,c (progn ,@body) nil))");
+  EXPECT_INT ("(mac-rest-when t 1 2 3)", 3);
+  EXPECT_FORM ("(mac-rest-when nil (car 1))", "nil");
+  EXPECT_FORM ("(macroexpand-1 '(mac-rest-when c a b))",
+               "(if c (progn a b) nil)");
+
+  EXPECT_NO_ERROR_SRC ("(defmacro (mac-rest-list . xs) `(quote ,xs))");
+  EXPECT_FORM ("(mac-rest-list a b)", "(a b)");
+  EXPECT_FORM ("(mac-rest-list)", "nil");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_lambda_rest_error ()
+{
+  // the required args are still required
+  EXPECT_ERROR ("((lambda (a b . r) a) 1)", q_error_funcargs);
+  EXPECT_ERROR ("(apply (lambda (a . r) a) nil)", q_error_funcargs);
+  EXPECT_NO_ERROR_SRC ("(define (def-rest-req a . r) a)");
+  EXPECT_ERROR ("(def-rest-req)", q_error_funcargs);
+
+  // the rest arg must be a symbol
+  EXPECT_ERROR ("(lambda (a . 1) a)", q_error_type);
+  EXPECT_ERROR ("(lambda 1 1)", q_error_type);
+  EXPECT_ERROR ("(define (def-rest-bad a . 1) a)", q_error_type);
+  // the required args too
+  EXPECT_ERROR ("(lambda (a 1 . r) a)", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
