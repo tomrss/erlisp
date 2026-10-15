@@ -8,6 +8,7 @@
 #include "parser.h"
 #include "prelude.h"
 #include "stack.h"
+#include <alloca.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
@@ -835,7 +836,7 @@ f_lambda (Lisp_Object form)
   else
     type_error (tail, LISP_SYMB);
 
-  Lisp_Object *argv = malloc (argsize * sizeof (Lisp_Object));
+  Lisp_Object *argv = alloca (argsize * sizeof (Lisp_Object));
 
   Lisp_Object argtail = args;
   for (int i = 0; i < minargs; i++)
