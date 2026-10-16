@@ -1,3 +1,5 @@
+;;; quasiquotation
+
 (define (qq-expand x)
   (cond
    ((nil? (cons? x))
@@ -11,3 +13,49 @@
 
 (defmacro (quasiquote x)
     (qq-expand x))
+
+
+;;; primitives
+
+(define (caar c) (car (car c)))
+(define (cdar c) (cdr (car c)))
+(define (caaar c) (car (car (car c))))
+(define (caadr c) (car (car (cdr c))))
+(define (cadar c) (car (cdr (car c))))
+(define (caddr c) (car (cdr (cdr c))))
+(define (cdaar c) (cdr (car (car c))))
+(define (cdadr c) (cdr (car (cdr c))))
+(define (cddar c) (cdr (cdr (car c))))
+(define (cdddr c) (cdr (cdr (cdr c))))
+
+(defmacro (when c . body)
+  `(if ,c (progn ,@body)))
+
+(defmacro (unless c . body)
+  `(if ,c nil ,@body))
+
+(define (map fun l)
+  (if l
+      (cons
+       (fun (car l))
+       (map fun (cdr l)))
+      nil))
+
+(defmacro (let args . body)
+  `((lambda ,(map car args)
+      ,@body)
+    ,@(map cadr args)))
+
+(defmacro (let* args . body)
+  (if args
+      `(let ((,(caar args) ,(cadar args)))
+         (let* ,(cdr args) ,@body))
+      `(progn ,@body)))
+
+(defmacro (letrec* args . body)
+  `((lambda ()
+      ,(map ,(lambda (x)
+               `(define (car x) (cadr x)))
+            (car args))
+      ,@body)
+    ,@(map cadr args)))

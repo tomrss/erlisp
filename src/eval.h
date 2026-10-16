@@ -14,7 +14,6 @@ Lisp_Object call_lambda (Lisp_Lambda *ulambda, int nargs,
                          Lisp_Object *argvals);
 Lisp_Object apply (Lisp_Object env, Lisp_Object fun, Lisp_Object args);
 Lisp_Object progn (Lisp_Object env, Lisp_Object form);
-Lisp_Object let (Lisp_Object env, Lisp_Object form);
 Lisp_Object define (Lisp_Object env, Lisp_Object form);
 Lisp_Object unwind_protect (Lisp_Object env, Lisp_Object form);
 Lisp_Object macroexpand_all (Lisp_Object form);

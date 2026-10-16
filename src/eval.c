@@ -384,38 +384,6 @@ progn (Lisp_Object env, Lisp_Object form)
 }
 
 Lisp_Object
-let (Lisp_Object env, Lisp_Object form)
-{
-  Lisp_Object args = f_car (form);
-  Lisp_Object argstail = args;
-  Lisp_Object body = f_cdr (form);
-  Lisp_Object letenv = env_new (env);
-  Lisp_Object argform, argsym, argval;
-
-  stack_push (
-      (struct stackframe){ .fname = "let", .env = letenv, .form = form });
-
-  while (!nil (argstail))
-    {
-      argform = f_car (argstail);
-      argsym = f_car (argform);
-      check_type (argsym, LISP_SYMB);
-
-      // dirty trick to optimize lookups of purely global symbols
-      unbox_symbol (argsym)->localbound = 1;
-
-      argval = eval (letenv, f_car (f_cdr (argform)));
-      env_define (letenv, argsym, argval);
-      argstail = f_cdr (argstail);
-    }
-
-  Lisp_Object res = progn (letenv, body);
-  stack_pop ();
-
-  return res;
-}
-
-Lisp_Object
 define (Lisp_Object env, Lisp_Object form)
 {
   Lisp_Object var = f_car (form);
@@ -717,7 +685,7 @@ condition_case_n (Lisp_Object (*fun) (int, Lisp_Object *), int nargs,
 int
 safe_eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out)
 {
-  return condition_case_2 (eval, env, form, out);
+  return condition_case_2 (eval_toplevel, env, form, out);
 }
 
 Lisp_Object

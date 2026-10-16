@@ -35,8 +35,6 @@
       (1 font-lock-keyword-face)
       (2 font-lock-function-name-face nil t)))))
 
-(put 'defmacro 'scheme-indent-function 2)
-
 (add-to-list 'auto-mode-alist '("\\.erlisp\\'" . erlisp-mode))
 
 (defun run-erlisp ()

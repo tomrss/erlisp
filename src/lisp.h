@@ -494,12 +494,9 @@ Lisp_Object f_le (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_leq (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_progn (Lisp_Object form);
 Lisp_Object f_quote (Lisp_Object form);
-Lisp_Object f_let (Lisp_Object form); // it's really a let*
 Lisp_Object f_and (Lisp_Object form);
 Lisp_Object f_or (Lisp_Object form);
 Lisp_Object f_if (Lisp_Object form);
-Lisp_Object f_when (Lisp_Object form);
-Lisp_Object f_unless (Lisp_Object form);
 Lisp_Object f_cond (Lisp_Object form);
 Lisp_Object f_lambda (Lisp_Object form);
 Lisp_Object f_define (Lisp_Object form);

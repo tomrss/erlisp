@@ -701,12 +701,6 @@ f_quote (Lisp_Object form)
 }
 
 Lisp_Object
-f_let (Lisp_Object form)
-{
-  return let (env_current (), form);
-}
-
-Lisp_Object
 f_define (Lisp_Object form)
 {
   return define (env_current (), form);
@@ -752,30 +746,6 @@ f_if (Lisp_Object form)
     return eval (env_current (), f_car (body));
   else
     return f_progn (f_cdr (body));
-}
-
-Lisp_Object
-f_when (Lisp_Object form)
-{
-  Lisp_Object cond = f_car (form);
-  Lisp_Object body = f_cdr (form);
-
-  if (!nil (eval (env_current (), cond)))
-    return f_progn (body);
-
-  return q_nil;
-}
-
-Lisp_Object
-f_unless (Lisp_Object form)
-{
-  Lisp_Object cond = f_car (form);
-  Lisp_Object body = f_cdr (form);
-
-  if (nil (eval (env_current (), cond)))
-    return f_progn (body);
-
-  return q_nil;
 }
 
 Lisp_Object
@@ -1454,13 +1424,9 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("<=", 2, 2, f_leq));
   obarray_put (o, DEFSUBR ("progn", 0, UNEVALLED, f_progn));
   q_quote = obarray_put (o, DEFSUBR ("quote", 0, UNEVALLED, f_quote));
-  obarray_put (o, DEFSUBR ("let*", 1, UNEVALLED, f_let));
-  obarray_put (o, DEFSUBR ("let", 1, UNEVALLED, f_let));
   obarray_put (o, DEFSUBR ("and", 1, UNEVALLED, f_and));
   obarray_put (o, DEFSUBR ("or", 1, UNEVALLED, f_or));
   obarray_put (o, DEFSUBR ("if", 2, UNEVALLED, f_if));
-  obarray_put (o, DEFSUBR ("when", 2, UNEVALLED, f_when));
-  obarray_put (o, DEFSUBR ("unless", 2, UNEVALLED, f_unless));
   obarray_put (o, DEFSUBR ("cond", 1, UNEVALLED, f_cond));
   q_lambda = obarray_put (o, DEFSUBR ("lambda", 2, UNEVALLED, f_lambda));
   q_define = obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
