@@ -57,4 +57,4 @@
       (sum-times 40 (lambda ()
         (length (make-list 100)))))))))
 
-(format t (concat (number->string kept) " " (number->string churned)))
+(format t "~a~%" (concat (number->string kept) " " (number->string churned)))

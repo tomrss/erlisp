@@ -7,6 +7,7 @@
 #include "obarray.h"
 #include "parser.h"
 #include "prelude.h"
+#include "print.h"
 #include "stack.h"
 #include <alloca.h>
 #include <arpa/inet.h>
@@ -438,6 +439,36 @@ f_concat (int argc, Lisp_Object *argv)
 }
 
 Lisp_Object
+f_string_ref (Lisp_Object string, Lisp_Object i)
+{
+  check_type (string, LISP_STRG);
+  check_type (i, LISP_INTG);
+
+  Lisp_Integer ui = unbox_int (i);
+  Lisp_String *ustring = unbox_string (string);
+
+  if (ui < 0 || ui >= (Lisp_Integer)ustring->size)
+    // TODO out of bound error
+    xsignal (q_error, f_cons (make_string ("index out of bound"), q_nil));
+
+  return box_char ((unsigned char)ustring->data[ui]);
+}
+
+Lisp_Object
+f_symbol_to_string (Lisp_Object symbol)
+{
+  check_type (symbol, LISP_SYMB);
+  // this is correct because strings are immutable, otherwise we should copy
+  return unbox_symbol (symbol)->name;
+}
+
+Lisp_Object
+f_string_to_symbol (Lisp_Object string)
+{
+  return f_intern (string);
+}
+
+Lisp_Object
 f_length (Lisp_Object list)
 {
   if (nil (list))
@@ -834,29 +865,72 @@ f_lambda (Lisp_Object form)
 Lisp_Object
 f_format (int argc, Lisp_Object *argv)
 {
-  // TODO support formatting
-  (void)argc; // unused for now
 
   Lisp_Object dest = argv[0];
+  Lisp_Port *p;
+  if (eq (q_t, dest))
+    p = unbox_port (p_current_output_port);
+  else if (eq (q_nil, dest))
+    p = unbox_port (f_open_output_string ());
+  else
+    p = safe_unbox_optionl_out_port (dest);
+
   Lisp_Object fmt = argv[1];
   check_type (fmt, LISP_STRG);
   Lisp_String *ufmt = unbox_string (fmt);
 
-  if (eq (dest, q_t))
+  char *cur = ufmt->data;
+  int argind = 2; // 0->dest, 1->fmt
+  while (cur[0] != '\0')
     {
-      // print to stdout
-      fwrite (ufmt->data, sizeof (char), ufmt->size, stdout);
-      printf ("\n");
-      return q_nil;
+      size_t len = strcspn (cur, "~");
+      port_write_nstring (cur, len, p);
+      cur += len;
+      if (cur[0] == '~')
+        {
+          // simple SRFI-28 impl
+          // https://srfi.schemers.org/srfi-28/srfi-28.html
+          cur += 1;
+          switch (cur[0])
+            {
+            case 'a':
+              if (argind >= argc)
+                f_signal (q_error,
+                          f_cons (make_string ("invelid fmt"),
+                                  f_cons (box_int (argind),
+                                          f_cons (box_int (argc), q_nil))));
+              fprint_form (p, argv[argind++], 1);
+              break;
+            case 's':
+              if (argind >= argc)
+                // todo
+                f_signal (q_error,
+                          f_cons (make_string ("invelid fmt"), q_nil));
+              fprint_form (p, argv[argind++], 0);
+              break;
+            case '%':
+              port_write_char ('\n', p);
+              break;
+            case '~':
+              port_write_char ('~', p);
+              break;
+            default:
+              // todo
+              f_signal (q_error,
+                        f_cons (make_string ("invelid fmt str"), q_nil));
+            }
+          cur += 1;
+        }
     }
-  if (nil (dest))
-    {
-      // return fmt string
-      return fmt;
-    }
+  if (argind != argc)
+    // todo this check could be useless/harmful? runs in case of more fmt args
+    // than fmt ~ directives todo err
+    f_signal (q_error, f_cons (make_string ("invelid fmt END"), q_nil));
 
-  unimplemented_error (
-      "print to dest not nil (return str) or t (print stdout)");
+  if (eq (q_nil, dest)) // local port
+    return f_get_output_string (box_port (p));
+
+  return q_nil;
 }
 
 Lisp_Object
@@ -1223,17 +1297,45 @@ port_peek_char (Lisp_Port *p)
   return c;
 }
 
+static inline int
+port_unsafe_write_char (int c, Lisp_Port *p)
+{
+  int w = p->put_char (c, p);
+  if (w == EOF)
+    // TODO this is not a file error
+    file_error (make_string ("error writing to output port"));
+  return w;
+}
+
 int
 port_write_char (int c, Lisp_Port *p)
 {
   if (p->closed)
     closedport_error (box_port (p));
 
-  int w = p->put_char (c, p);
-  if (w == EOF)
-    // TODO this is not a file error
-    file_error (make_string ("error writing to output port"));
-  return w;
+  return port_unsafe_write_char (c, p);
+}
+
+void
+port_write_nstring (const char *string, size_t size, Lisp_Port *p)
+{
+  if (p->closed)
+    closedport_error (box_port (p));
+
+  for (size_t i = 0; i < size; i++)
+    port_unsafe_write_char (string[i], p);
+}
+
+void
+port_write_string (const char *string, Lisp_Port *p)
+{
+  if (p->closed)
+    closedport_error (box_port (p));
+
+  int i = 0;
+  char c;
+  while ((c = string[i++]) != '\0')
+    port_unsafe_write_char (c, p);
 }
 
 Lisp_Object
@@ -1282,6 +1384,22 @@ f_write_char (Lisp_Object c, Lisp_Object port)
   Lisp_Port *p = safe_unbox_optionl_out_port (port);
   int w = port_write_char (unbox_char (c), p);
   return box_char ((unsigned char)w);
+}
+
+Lisp_Object
+f_write (Lisp_Object obj, Lisp_Object port)
+{
+  Lisp_Port *p = safe_unbox_optionl_out_port (port);
+  fprint_form (p, obj, 0);
+  return q_nil;
+}
+
+Lisp_Object
+f_display (Lisp_Object obj, Lisp_Object port)
+{
+  Lisp_Port *p = safe_unbox_optionl_out_port (port);
+  fprint_form (p, obj, 1);
+  return q_nil;
 }
 
 Lisp_Object
@@ -1406,9 +1524,12 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("memq", 2, 2, f_memq));
   obarray_put (o, DEFSUBR ("string=?", 2, 2, f_string_equal_p));
   obarray_put (o, DEFSUBR ("string-length", 1, 1, f_string_length));
+  obarray_put (o, DEFSUBR ("string-ref", 2, 2, f_string_ref));
   obarray_put (o, DEFSUBR ("number->string", 1, 1, f_number_to_string));
   obarray_put (o, DEFSUBR ("string->number", 1, 1, f_string_to_number));
   obarray_put (o, DEFSUBR ("concat", 0, MANY, f_concat));
+  obarray_put (o, DEFSUBR ("symbol->string", 1, 1, f_symbol_to_string));
+  obarray_put (o, DEFSUBR ("string->symbol", 1, 1, f_string_to_symbol));
   obarray_put (o, DEFSUBR ("length", 1, 1, f_length));
   obarray_put (o, DEFSUBR ("+", 0, MANY, f_sum));
   obarray_put (o, DEFSUBR ("-", 1, MANY, f_subtract));
@@ -1438,6 +1559,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("error-symbol", 1, 1, f_error_symbol));
   obarray_put (o, DEFSUBR ("error-backtrace", 1, 1, f_error_backtrace));
   obarray_put (o, DEFSUBR ("error-data", 1, 1, f_error_data));
+  obarray_put (o, DEFSUBR ("intern", 1, 1, f_intern));
   obarray_put (o, DEFSUBR ("gc", 0, 1, f_gc));
   obarray_put (o, DEFSUBR ("memstats", 0, 0, f_memstats));
   obarray_put (o, DEFSUBR ("memdump", 0, 0, f_memdump));
@@ -1459,6 +1581,8 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("peek-char", 0, 1, f_peek_char));
   obarray_put (o, DEFSUBR ("char-ready?", 0, 1, f_char_ready_p));
   obarray_put (o, DEFSUBR ("write-char", 1, 2, f_write_char));
+  obarray_put (o, DEFSUBR ("write", 1, 2, f_write));
+  obarray_put (o, DEFSUBR ("display", 1, 2, f_display));
   obarray_put (o, DEFSUBR ("flush-output-port", 0, 1, f_flush_output_port));
   obarray_put (o, DEFSUBR ("unwind-protect", 1, UNEVALLED, f_unwind_protect));
   obarray_put (o, DEFSUBR ("condition-case", 1, UNEVALLED, f_condition_case));

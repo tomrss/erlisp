@@ -59,4 +59,4 @@
     (sum-times 100 (lambda ()
       (round (tick)))))))
 
-(format t (concat (number->string total) " " (number->string (tick))))
+(format t "~a~%" (concat (number->string total) " " (number->string (tick))))

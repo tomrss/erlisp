@@ -19,6 +19,6 @@
       0
       (+ (f) (sum-times (- n 1) f))))
 
-(format t (number->string
-           (sum-times 200 (lambda ()
-             (sum-times 100 try-once)))))
+(format t "~a~%" (number->string
+                  (sum-times 200 (lambda ()
+                    (sum-times 100 try-once)))))

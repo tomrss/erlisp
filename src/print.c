@@ -1,20 +1,54 @@
 #include "print.h"
 #include "lisp.h"
 #include <math.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
 
-// TODO very ugly, pls print to string not to stdout
+static int
+stderr_port_put_char (int c, Lisp_Port *p)
+{
+  return fputc (c, p->backend.file);
+}
+
+// used by print_error. not in the heap and never boxed: it works without
+// memory and before init, the gc doesn't see it and lisp can't reach it
+static Lisp_Port stderr_port = {
+  .header = { .type = LISP_PORT },
+  .direction = PORT_OUT,
+  .type = PORT_FILE,
+  .current = PORT_NOPEEK,
+  .closed = 0,
+  .put_char = &stderr_port_put_char,
+};
+
+void
+port_printf (Lisp_Port *p, const char *fmt, ...)
+{
+  va_list args;
+  va_start (args, fmt);
+  char buf[256];
+  int n = vsnprintf (buf, sizeof (buf), fmt, args);
+  va_end (args);
+  if (n < 0)
+    return;
+  if ((size_t)n >= sizeof (buf))
+    n = sizeof (buf) - 1;
+
+  port_write_nstring (buf, n, p);
+}
 
 static void
-fprint_float (FILE *stream, Lisp_Float f)
+fprint_float (Lisp_Port *p, Lisp_Float f)
 {
   if (isnan (f))
     {
-      fprintf (stream, "+nan.0");
+      port_printf (p, "+nan.0");
       return;
     }
   if (isinf (f))
     {
-      fprintf (stream, f > 0 ? "+inf.0" : "-inf.0");
+      port_printf (p, f > 0 ? "+inf.0" : "-inf.0");
       return;
     }
 
@@ -32,116 +66,122 @@ fprint_float (FILE *stream, Lisp_Float f)
   if (!strpbrk (buf, ".e"))
     strcat (buf, ".0");
 
-  fprintf (stream, "%s", buf);
+  port_printf (p, "%s", buf);
 }
 
 // mirror of parse_char in lexer.c, so that a printed char reads back
 static void
-fprint_char (FILE *stream, Lisp_Char c)
+fprint_char (Lisp_Port *p, Lisp_Char c)
 {
   switch (c)
     {
     case '\n':
-      fprintf (stream, "?\\n");
+      port_write_string ("?\\n", p);
       break;
     case '\t':
-      fprintf (stream, "?\\t");
+      port_write_string ("?\\t", p);
       break;
     case '\r':
-      fprintf (stream, "?\\r");
+      port_write_string ("?\\r", p);
       break;
     case ' ':
-      fprintf (stream, "?\\s");
+      port_write_string ("?\\s", p);
       break;
     case 27:
-      fprintf (stream, "?\\e");
+      port_write_string ("?\\e", p);
       break;
     case '\0':
-      fprintf (stream, "?\\0");
+      port_write_string ("?\\0", p);
       break;
     case '\\':
-      fprintf (stream, "?\\\\");
+      port_write_string ("?\\\\", p);
       break;
     default:
-      fprintf (stream, "?%c", c);
+      port_printf (p, "?%c", c);
     }
 }
 
 void
-print_form (Lisp_Object form)
+print_form (Lisp_Object form, int display)
 {
-  fprint_form (stdout, form);
+  fprint_form (unbox_port (f_current_output_port ()), form, display);
 }
 
 void
-fprint_form (FILE *stream, Lisp_Object form)
+fprint_form (Lisp_Port *p, Lisp_Object form, int display)
 {
   if (nil (form))
     {
-      fprintf (stream, "NIL");
+      port_write_string ("NIL", p);
       return;
     }
   if (eq (form, q_t))
     {
-      fprintf (stream, "T");
+      port_write_char ('T', p);
       return;
     }
   if (unbound (form))
     {
-      fprintf (stream, "UNBOUND");
+      port_write_string ("UNBOUND", p);
       return;
     }
 
   switch (type_of (form))
     {
     case LISP_INTG:
-      fprintf (stream, "%ld", (long)unbox_int (form));
+      port_printf (p, "%ld", (long)unbox_int (form));
       break;
     case LISP_STRG:
-      fprintf (stream, "\"%.*s\"", (int)unbox_string (form)->size,
-               unbox_string (form)->data);
+      if (!display)
+        port_write_char ('"', p);
+      port_write_nstring (unbox_string (form)->data, unbox_string (form)->size,
+                          p);
+      if (!display)
+        port_write_char ('"', p);
       break;
     case LISP_VECT:
-      fprintf (stream, "[size:%zu]", unbox_vector (form)->size);
+      port_printf (p, "[size:%zu]", unbox_vector (form)->size);
       break;
     case LISP_PORT:
-      fprintf (stream, "[port,%s,%s%s]",
-               unbox_port (form)->direction == PORT_IN ? "in" : "out",
-               unbox_port (form)->type == PORT_FILE ? "file" : "string",
-               unbox_port (form)->closed ? ",closed" : "");
+      port_printf (p, "[port,%s,%s%s]",
+                   unbox_port (form)->direction == PORT_IN ? "in" : "out",
+                   unbox_port (form)->type == PORT_FILE ? "file" : "string",
+                   unbox_port (form)->closed ? ",closed" : "");
       break;
     case LISP_SUBR:
-      fprintf (stream, "['%s',%d,", unbox_subr (form)->name,
-               unbox_subr (form)->header.minargs);
+      port_printf (p, "['%s',%d,", unbox_subr (form)->name,
+                   unbox_subr (form)->header.minargs);
       if (unbox_subr (form)->header.maxargs == MANY)
-        fprintf (stream, "many]");
+        port_printf (p, "many]");
       else
-        fprintf (stream, "%d]", unbox_subr (form)->header.maxargs);
+        port_printf (p, "%d]", unbox_subr (form)->header.maxargs);
       break;
     case LISP_LMBD:
-      fprintf (stream, "[lambda,%d,", unbox_lambda (form)->header.minargs);
+      port_printf (p, "[lambda,%d,", unbox_lambda (form)->header.minargs);
       if (unbox_lambda (form)->header.maxargs == MANY)
-        fprintf (stream, "many]");
+        port_printf (p, "many]");
       else
-        fprintf (stream, "%d]", unbox_lambda (form)->header.maxargs);
+        port_printf (p, "%d]", unbox_lambda (form)->header.maxargs);
       break;
     case LISP_SYMB:
-      fprintf (stream, "%.*s",
-               (int)unbox_string (unbox_symbol (form)->name)->size,
-               unbox_string (unbox_symbol (form)->name)->data);
+      port_write_nstring (unbox_string (unbox_symbol (form)->name)->data,
+                          unbox_string (unbox_symbol (form)->name)->size, p);
       break;
     case LISP_CONS:
-      fprintf (stream, "(");
-      fprint_form (stream, unbox_cons (form)->car);
-      fprintf (stream, " . ");
-      fprint_form (stream, unbox_cons (form)->cdr);
-      fprintf (stream, ")");
+      port_printf (p, "(");
+      fprint_form (p, unbox_cons (form)->car, display);
+      port_printf (p, " . ");
+      fprint_form (p, unbox_cons (form)->cdr, display);
+      port_printf (p, ")");
       break;
     case LISP_FLOT:
-      fprint_float (stream, unbox_float (form));
+      fprint_float (p, unbox_float (form));
       break;
     case LISP_CHAR:
-      fprint_char (stream, unbox_char (form));
+      if (display)
+        port_write_char (unbox_char (form), p);
+      else
+        fprint_char (p, unbox_char (form));
       break;
     }
 }
@@ -149,34 +189,37 @@ fprint_form (FILE *stream, Lisp_Object form)
 void
 print_error (Lisp_Object err)
 {
-  fprint_form (stderr, f_error_symbol (err));
-  fprintf (stderr, ":");
+  Lisp_Port *p = &stderr_port;
+  // stderr is not a constant, it can't go in the static initializer
+  p->backend.file = stderr;
+
+  fprint_form (p, f_error_symbol (err), 0);
+  port_write_string (":", p);
 
   // data is usually a list of objects, e.g. (symbol) for unbound-error:
   // print its elements. anything else (e.g. an int) is printed as is
   Lisp_Object data = f_error_data (err);
   if (consp (data))
-    for (Lisp_Object tail = data; consp (tail);
-         tail = unbox_cons (tail)->cdr)
+    for (Lisp_Object tail = data; consp (tail); tail = unbox_cons (tail)->cdr)
       {
-        fprintf (stderr, " ");
-        fprint_form (stderr, unbox_cons (tail)->car);
+        port_write_string (" ", p);
+        fprint_form (p, unbox_cons (tail)->car, 0);
       }
   else if (!nil (data))
     {
-      fprintf (stderr, " ");
-      fprint_form (stderr, data);
+      port_write_string (" ", p);
+      fprint_form (p, data, 0);
     }
-  fprintf (stderr, "\n");
+  port_write_string ("\n", p);
 
   Lisp_Object backtrace = f_error_backtrace (err);
   Lisp_Object tail = backtrace;
 
-  fprintf (stderr, "Backtrace:\n");
+  port_write_string ("Backtrace:\n", p);
   while (!nil (tail))
     {
       const char *fname = unbox_string (f_car (tail))->data;
-      fprintf (stderr, " at %s\n", fname);
+      port_printf (p, " at %s\n", fname);
       tail = f_cdr (tail);
     }
 }

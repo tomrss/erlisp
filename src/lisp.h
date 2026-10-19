@@ -476,9 +476,12 @@ Lisp_Object f_memq (Lisp_Object elt, Lisp_Object list);
 Lisp_Object f_append (Lisp_Object list, Lisp_Object o);
 Lisp_Object f_string_equal_p (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_string_length (Lisp_Object string);
+Lisp_Object f_string_ref (Lisp_Object string, Lisp_Object i);
 Lisp_Object f_number_to_string (Lisp_Object number);
 Lisp_Object f_string_to_number (Lisp_Object string);
 Lisp_Object f_concat (int argc, Lisp_Object *argv);
+Lisp_Object f_symbol_to_string (Lisp_Object symbol);
+Lisp_Object f_string_to_symbol (Lisp_Object string);
 Lisp_Object f_length (Lisp_Object list);
 Lisp_Object f_sum (int argc, Lisp_Object *argv);
 Lisp_Object f_subtract (int argc, Lisp_Object *argv);
@@ -529,6 +532,8 @@ Lisp_Object f_read_char (Lisp_Object port);
 Lisp_Object f_peek_char (Lisp_Object port);
 Lisp_Object f_char_ready_p (Lisp_Object port);
 Lisp_Object f_write_char (Lisp_Object c, Lisp_Object port);
+Lisp_Object f_write (Lisp_Object obj, Lisp_Object port);
+Lisp_Object f_display (Lisp_Object obj, Lisp_Object port);
 Lisp_Object f_flush_output_port (Lisp_Object port);
 Lisp_Object f_unwind_protect (Lisp_Object form);
 Lisp_Object f_condition_case (Lisp_Object form);
@@ -572,6 +577,8 @@ void init_builtins ();
 int port_read_char (Lisp_Port *p);
 int port_peek_char (Lisp_Port *p);
 int port_write_char (int c, Lisp_Port *p);
+void port_write_nstring (const char *string, size_t size, Lisp_Port *p);
+void port_write_string (const char *string, Lisp_Port *p);
 
 // inlined helpers
 

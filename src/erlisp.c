@@ -66,7 +66,7 @@ main (int argc, char **argv)
           Lisp_Object port = f_open_input_string (make_string (line));
           if (condition_case_1 (read_eval, port, &res))
             {
-              print_form (res);
+              print_form (res, 0);
               printf ("\n");
             }
           else

@@ -33,9 +33,9 @@
 (gc)
 
 ;; walk the live set: it must still be all there
-(format t (number->string
-           (sum-map (lambda (l1)
-                      (sum-map (lambda (l2)
-                                 (sum-map length l2))
-                               l1))
-                    keep)))
+(format t "~a~%" (number->string
+                  (sum-map (lambda (l1)
+                             (sum-map (lambda (l2)
+                                        (sum-map length l2))
+                                      l1))
+                           keep)))

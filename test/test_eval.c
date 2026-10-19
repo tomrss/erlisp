@@ -400,7 +400,6 @@ test_eval_progn_single ()
   Lisp_Object result;
   TEST_ASSERT (condition_case_2 (progn, l_globalenv, form, &result),
                "unexpected %s", errname (result));
-  debug_print_form (result);
   TEST_ASSERT (eq (result, box_int (4)), "wrong");
 
   return TEST_RESULT_SUCCESS;
@@ -418,7 +417,6 @@ test_eval_quote ()
   Lisp_Object result;
   TEST_ASSERT (condition_case_2 (progn, l_globalenv, form, &result),
                "unexpected %s", errname (result));
-  debug_print_form (result);
   TEST_CHECK_TYPE ("quoted", form, LISP_CONS);
 
   return TEST_RESULT_SUCCESS;

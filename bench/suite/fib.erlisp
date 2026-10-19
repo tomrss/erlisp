@@ -9,4 +9,4 @@
       n
       (+ (fib (- n 1)) (fib (- n 2)))))
 
-(format t (number->string (fib 30)))
+(format t "~a~%" (number->string (fib 30)))

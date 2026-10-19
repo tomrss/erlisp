@@ -102,6 +102,7 @@ static TestResult test_builtins_number_to_string ();
 static TestResult test_builtins_number_to_string_edge ();
 static TestResult test_builtins_string_to_number ();
 static TestResult test_builtins_format ();
+static TestResult test_builtins_write_display ();
 static TestResult test_builtins_sum ();
 static TestResult test_builtins_subtract ();
 static TestResult test_builtins_multiply ();
@@ -184,6 +185,7 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "num->str <=0 ", .run = test_builtins_number_to_string_edge },
   { .skip = 0, .name = "string->number", .run = test_builtins_string_to_number },
   { .skip = 0, .name = "format", .run = test_builtins_format },
+  { .skip = 0, .name = "write-display", .run = test_builtins_write_display },
   { .skip = 0, .name = "+", .run = test_builtins_sum },
   { .skip = 0, .name = "-", .run = test_builtins_subtract },
   { .skip = 0, .name = "*", .run = test_builtins_multiply },
@@ -555,8 +557,90 @@ static TestResult
 test_builtins_format ()
 {
   EXPECT_FORM ("(format nil \"hello\")", "\"hello\"");
-  EXPECT_ERROR ("(format 1 \"hello\")", q_error_unimplemented);
+  EXPECT_FORM ("(format nil \"\")", "\"\"");
+  EXPECT_FORM ("(format t \"\")", "nil");
+  EXPECT_ERROR ("(format 1 \"hello\")", q_error_type);
   EXPECT_ERROR ("(format nil 1)", q_error_type);
+
+  // ~a displays, ~s writes
+  EXPECT_FORM ("(format nil \"~a\" \"ab\")", "\"ab\"");
+  EXPECT_INT ("(string-length (format nil \"~s\" \"ab\"))", 4);
+  EXPECT_FORM ("(format nil \"~a\" ?x)", "\"x\"");
+  EXPECT_FORM ("(format nil \"~s\" ?x)", "\"?x\"");
+  EXPECT_FORM ("(format nil \"~a ~s\" 'foo 42)", "\"foo 42\"");
+  EXPECT_FORM ("(format nil \"x~ay~az\" 1 2)", "\"x1y2z\"");
+
+  // ~% is a newline, ~~ a tilde
+  EXPECT_FORM ("(string-ref (format nil \"a~%b\") 1)", "?\\n");
+  EXPECT_INT ("(string-length (format nil \"~%\"))", 1);
+  EXPECT_FORM ("(format nil \"a~~b\")", "\"a~b\"");
+
+  // directives and arguments must match
+  EXPECT_ERROR ("(format nil \"~a\")", q_error);
+  EXPECT_ERROR ("(format nil \"~a ~s\" 1)", q_error);
+  EXPECT_ERROR ("(format nil \"a\" 1)", q_error);
+  EXPECT_ERROR ("(format nil \"~q\" 1)", q_error);
+  EXPECT_ERROR ("(format nil \"a~\")", q_error);
+
+  // a port as destination: the output accumulates there
+  EXPECT_NO_ERROR_SRC ("(define fmt-port (open-output-string))");
+  EXPECT_FORM ("(format fmt-port \"a~a\" 1)", "nil");
+  EXPECT_FORM ("(format fmt-port \"b\")", "nil");
+  EXPECT_FORM ("(get-output-string fmt-port)", "\"a1b\"");
+  EXPECT_ERROR ("(format (open-input-string \"x\") \"a\")",
+                q_error_portinvalid);
+  EXPECT_NO_ERROR_SRC ("(close-port fmt-port)");
+  EXPECT_ERROR ("(format fmt-port \"a\")", q_error_portclosed);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_write_display ()
+{
+  // the value is nil, the output goes to the port
+  EXPECT_NO_ERROR_SRC ("(define wd-port (open-output-string))");
+  EXPECT_FORM ("(write 42 wd-port)", "nil");
+  EXPECT_FORM ("(display 42 wd-port)", "nil");
+  EXPECT_FORM ("(get-output-string wd-port)", "\"4242\"");
+
+  // same output for anything but strings and chars
+  EXPECT_NO_ERROR_SRC ("(define wd-port (open-output-string))");
+  EXPECT_NO_ERROR_SRC ("(write 'foo wd-port)");
+  EXPECT_NO_ERROR_SRC ("(display 'foo wd-port)");
+  EXPECT_FORM ("(get-output-string wd-port)", "\"foofoo\"");
+
+  // strings: write adds the quotes, display doesn't
+  EXPECT_NO_ERROR_SRC ("(define wd-port (open-output-string))");
+  EXPECT_NO_ERROR_SRC ("(display \"ab\" wd-port)");
+  EXPECT_FORM ("(get-output-string wd-port)", "\"ab\"");
+  EXPECT_NO_ERROR_SRC ("(define wd-port (open-output-string))");
+  EXPECT_NO_ERROR_SRC ("(write \"ab\" wd-port)");
+  EXPECT_INT ("(string-length (get-output-string wd-port))", 4);
+  EXPECT_FORM ("(string-ref (get-output-string wd-port) 0)", "?\"");
+
+  // chars: write prints the reader syntax, display the char itself
+  EXPECT_NO_ERROR_SRC ("(define wd-port (open-output-string))");
+  EXPECT_NO_ERROR_SRC ("(write ?x wd-port)");
+  EXPECT_NO_ERROR_SRC ("(display ?x wd-port)");
+  EXPECT_FORM ("(get-output-string wd-port)", "\"?xx\"");
+
+  // the mode reaches the elements of a list: write has 2 quotes more
+  EXPECT_NO_ERROR_SRC ("(define wd-w (open-output-string))");
+  EXPECT_NO_ERROR_SRC ("(define wd-d (open-output-string))");
+  EXPECT_NO_ERROR_SRC ("(write '(\"ab\") wd-w)");
+  EXPECT_NO_ERROR_SRC ("(display '(\"ab\") wd-d)");
+  EXPECT_INT ("(- (string-length (get-output-string wd-w))"
+              "   (string-length (get-output-string wd-d)))",
+              2);
+
+  // port errors
+  EXPECT_ERROR ("(write 1 1)", q_error_type);
+  EXPECT_ERROR ("(display 1 1)", q_error_type);
+  EXPECT_ERROR ("(write 1 (open-input-string \"x\"))", q_error_portinvalid);
+  EXPECT_ERROR ("(display 1 (open-input-string \"x\"))", q_error_portinvalid);
+  EXPECT_NO_ERROR_SRC ("(close-port wd-port)");
+  EXPECT_ERROR ("(write 1 wd-port)", q_error_portclosed);
+  EXPECT_ERROR ("(display 1 wd-port)", q_error_portclosed);
   return TEST_RESULT_SUCCESS;
 }
 

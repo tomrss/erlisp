@@ -71,9 +71,6 @@ Lisp_Object
 eval (Lisp_Object env, Lisp_Object form)
 {
   Lisp_Object res;
-  debug_printf ("EVAL ");
-  debug_print_form (form);
-  debug_printf (" --> ");
   switch (type_of (form))
     {
     case LISP_INTG:
@@ -95,8 +92,6 @@ eval (Lisp_Object env, Lisp_Object form)
       break;
     }
 
-  debug_print_form (res);
-  debug_printf ("\n");
   return res;
 }
 
@@ -238,8 +233,7 @@ call_function (Lisp_Object env, Lisp_Object form)
 
       // gc is orrible here, but here all roots are protected
       // TODO find an elegand solution to this horror
-      if (gc_maybe ())
-        debug_printf ("GC executed");
+      gc_maybe ();
 
       // TODO ugly return in a switch that should decide arity!
       Lisp_Object result = call_unevalled_subr (unbox_subr (fun), funargs);
@@ -264,8 +258,7 @@ call_function (Lisp_Object env, Lisp_Object form)
 
   // gc is orrible here, but here all roots are protected
   // TODO find an elegand solution to this horror
-  if (gc_maybe ())
-    debug_printf ("GC executed");
+  gc_maybe ();
 
   Lisp_Object argtail = funargs;
   for (int i = 0; i < nargs; i++)

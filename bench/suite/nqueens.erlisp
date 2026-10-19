@@ -41,4 +41,4 @@
 (define (queens n)
   (try (iota1 n) nil nil))
 
-(format t (number->string (sum-times 20 (lambda () (queens 8)))))
+(format t "~a~%" (number->string (sum-times 20 (lambda () (queens 8)))))

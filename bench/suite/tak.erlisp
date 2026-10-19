@@ -16,4 +16,4 @@
       0
       (+ (f) (sum-times (- n 1) f))))
 
-(format t (number->string (sum-times 30 (lambda () (tak 18 12 6)))))
+(format t "~a~%" (number->string (sum-times 30 (lambda () (tak 18 12 6)))))

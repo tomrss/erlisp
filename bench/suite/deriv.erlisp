@@ -42,4 +42,4 @@
     (sum-times 100 (lambda ()
       (size (deriv expr)))))))
 
-(format t (number->string total))
+(format t "~a~%" (number->string total))

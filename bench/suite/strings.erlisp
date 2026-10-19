@@ -42,7 +42,7 @@
 
 ;; 20 * 10 * 10 rounds: sum-times is not a tail call, nesting keeps the
 ;; stack shallow so copy has room
-(format t (number->string
-           (sum-times 20 (lambda ()
-             (sum-times 10 (lambda ()
-               (sum-times 10 round)))))))
+(format t "~a~%" (number->string
+                  (sum-times 20 (lambda ()
+                    (sum-times 10 (lambda ()
+                      (sum-times 10 round)))))))
