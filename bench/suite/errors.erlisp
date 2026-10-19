@@ -10,7 +10,7 @@
       (+ 1 (deep (- n 1)))))
 
 (define (try-once)
-  (condition-case (deep 10)
+  (condition-case e (deep 10)
     (bench-error 1)))
 
 ;; sum of the results of n calls of (f)

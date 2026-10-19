@@ -691,13 +691,16 @@ safe_eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out)
 Lisp_Object
 condition_case (Lisp_Object env, Lisp_Object form)
 {
-  Lisp_Object body = f_car (form);
-  Lisp_Object conds = f_cdr (form);
+  Lisp_Object errtobind = f_car (form);
+  Lisp_Object body = f_car (f_cdr (form));
+  Lisp_Object conds = f_cdr (f_cdr (form));
   Lisp_Object res;
 
   if (safe_eval (env, body, &res))
+    // no error
     return res;
 
+  // there is error
   Lisp_Object err = res;
 
   while (!nil (conds))
@@ -712,8 +715,11 @@ condition_case (Lisp_Object env, Lisp_Object form)
           (consp (condsym)
            && !nil (f_memq (errsym, condsym)))) // match in list
         {
+          Lisp_Object errenv = env_new (env);
+          env_define (errenv, errtobind, err);
+
           Lisp_Object condbody = f_cdr (cond);
-          return progn (env, condbody);
+          return progn (errenv, condbody);
         }
 
       conds = f_cdr (conds);

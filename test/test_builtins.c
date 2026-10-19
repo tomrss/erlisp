@@ -1411,34 +1411,49 @@ static TestResult
 test_builtins_condition_case ()
 {
   // no error: the value is the body one, no handler runs
-  EXPECT_INT ("(condition-case (+ 40 2) (cc-boom 0))", 42);
+  EXPECT_INT ("(condition-case e (+ 40 2) (cc-boom 0))", 42);
 
   // caught by symbol: the value is the handler one
-  EXPECT_FORM ("(condition-case (signal 'cc-boom) (cc-boom 'caught))",
+  EXPECT_FORM ("(condition-case e (signal 'cc-boom) (cc-boom 'caught))",
                "caught");
 
   // the handler body is a progn
-  EXPECT_INT ("(condition-case (signal 'cc-boom) (cc-boom 1 2 3))", 3);
+  EXPECT_INT ("(condition-case e (signal 'cc-boom) (cc-boom 1 2 3))", 3);
 
   // the first matching clause wins, non matching ones are skipped
-  EXPECT_FORM ("(condition-case (signal 'cc-boom)"
+  EXPECT_FORM ("(condition-case e (signal 'cc-boom)"
                "  (cc-other 'other)"
                "  (cc-boom 'first)"
                "  (cc-boom 'second))",
                "first");
 
   // t catches everything
-  EXPECT_FORM ("(condition-case (signal 'cc-boom) (cc-other 'other) (t 'all))",
+  EXPECT_FORM ("(condition-case e (signal 'cc-boom)"
+               "  (cc-other 'other)"
+               "  (t 'all))",
                "all");
 
   // builtin errors are caught by their symbol
-  EXPECT_FORM ("(condition-case (car 1) (type-error 'type))", "type");
-  EXPECT_FORM ("(condition-case cc-unbound-var (unbound-error 'unbound))",
+  EXPECT_FORM ("(condition-case e (car 1) (type-error 'type))", "type");
+  EXPECT_FORM ("(condition-case e cc-unbound-var (unbound-error 'unbound))",
                "unbound");
 
   // the handler sees the locals of the condition-case env
-  EXPECT_INT ("(let ((x 5)) (condition-case (signal 'cc-boom) (cc-boom x)))",
+  EXPECT_INT ("(let ((x 5))"
+              "  (condition-case e (signal 'cc-boom) (cc-boom x)))",
               5);
+
+  // the handler sees the error bound to the variable
+  EXPECT_FORM ("(condition-case e (signal 'cc-boom '(1 2))"
+               "  (cc-boom (error-data e)))",
+               "(1 2)");
+  EXPECT_FORM ("(condition-case e (signal 'cc-boom) (t (error-symbol e)))",
+               "cc-boom");
+
+  // the variable is bound only in the handler, not outside
+  EXPECT_NO_ERROR_SRC ("(condition-case cc-err (signal 'cc-boom) (cc-boom 0))");
+  EXPECT_FORM ("(condition-case e cc-err (unbound-error 'unbound))",
+               "unbound");
   return TEST_RESULT_SUCCESS;
 }
 
@@ -1449,11 +1464,11 @@ test_builtins_condition_case_rethrow ()
   Lisp_Object boom2 = f_intern (make_string ("cc-boom2"));
 
   // no matching clause: the error propagates unchanged
-  EXPECT_ERROR ("(condition-case (signal 'cc-boom) (cc-other 'other))", boom);
+  EXPECT_ERROR ("(condition-case e (signal 'cc-boom) (cc-other 'other))", boom);
 
   // and is caught by an outer condition-case
-  EXPECT_FORM ("(condition-case"
-               "  (condition-case (signal 'cc-boom) (cc-other 'inner))"
+  EXPECT_FORM ("(condition-case e"
+               "  (condition-case e (signal 'cc-boom) (cc-other 'inner))"
                "  (cc-boom 'outer))",
                "outer");
 
@@ -1462,7 +1477,7 @@ test_builtins_condition_case_rethrow ()
   EXPECT_NO_ERROR_SRC ("(define cc-throw (lambda (a) (signal 'cc-boom a)))");
   Lisp_Object err;
   TEST_ASSERT (
-      !eval_src ("(condition-case (cc-throw (cons 3 4)) (cc-other 'other))",
+      !eval_src ("(condition-case e (cc-throw (cons 3 4)) (cc-other 'other))",
                  &err),
       "expected cc-boom, got no error");
   TEST_ASSERT (eq (f_error_symbol (err), boom), "expected cc-boom, got %s",
@@ -1475,14 +1490,14 @@ test_builtins_condition_case_rethrow ()
                "expected backtrace starting with (\"signal\" \"cc-throw\")");
 
   // an error in a handler is not caught by its own condition-case
-  EXPECT_ERROR ("(condition-case (signal 'cc-boom)"
+  EXPECT_ERROR ("(condition-case e (signal 'cc-boom)"
                 "  (cc-boom (signal 'cc-boom2))"
                 "  (cc-boom2 'same))",
                 boom2);
 
   // but by an outer one
-  EXPECT_FORM ("(condition-case"
-               "  (condition-case (signal 'cc-boom)"
+  EXPECT_FORM ("(condition-case e"
+               "  (condition-case e (signal 'cc-boom)"
                "    (cc-boom (signal 'cc-boom2)))"
                "  (cc-boom2 'outer))",
                "outer");
@@ -1494,7 +1509,7 @@ test_builtins_condition_case_unwind ()
 {
   // the cleanups run before the handler
   EXPECT_NO_ERROR_SRC ("(define cc-log nil)");
-  EXPECT_NO_ERROR_SRC ("(condition-case"
+  EXPECT_NO_ERROR_SRC ("(condition-case e"
                        "  (unwind-protect (signal 'cc-boom)"
                        "    (set! cc-log (cons 'cleanup cc-log)))"
                        "  (cc-boom (set! cc-log (cons 'handler cc-log))))");
@@ -1504,9 +1519,9 @@ test_builtins_condition_case_unwind ()
   // outer condition-case too
   EXPECT_NO_ERROR_SRC ("(define cc-log nil)");
   EXPECT_NO_ERROR_SRC (
-      "(condition-case"
+      "(condition-case e"
       "  (unwind-protect"
-      "    (condition-case"
+      "    (condition-case e"
       "      (unwind-protect (signal 'cc-boom)"
       "        (set! cc-log (cons 'inner cc-log)))"
       "      (cc-other 'other))"
@@ -1519,7 +1534,7 @@ test_builtins_condition_case_unwind ()
   EXPECT_NO_ERROR_SRC (
       "(unwind-protect"
       "  (progn"
-      "    (condition-case (signal 'cc-boom) (cc-boom 'caught))"
+      "    (condition-case e (signal 'cc-boom) (cc-boom 'caught))"
       "    (set! cc-log (cons 'after cc-log)))"
       "  (set! cc-log (cons 'outer cc-log)))");
   EXPECT_FORM ("cc-log", "(outer after)");
@@ -1534,16 +1549,16 @@ test_builtins_condition_case_handlers ()
 
   // local exit
   for (int i = 0; i < 600; i++)
-    EXPECT_INT ("(condition-case 1 (cc-boom 0))", 1);
+    EXPECT_INT ("(condition-case e 1 (cc-boom 0))", 1);
 
   // caught
   for (int i = 0; i < 600; i++)
-    EXPECT_FORM ("(condition-case (signal 'cc-boom) (cc-boom 'ok))", "ok");
+    EXPECT_FORM ("(condition-case e (signal 'cc-boom) (cc-boom 'ok))", "ok");
 
   // rethrown
   for (int i = 0; i < 600; i++)
-    EXPECT_FORM ("(condition-case"
-                 "  (condition-case (signal 'cc-boom) (cc-other 'inner))"
+    EXPECT_FORM ("(condition-case e"
+                 "  (condition-case e (signal 'cc-boom) (cc-other 'inner))"
                  "  (cc-boom 'ok))",
                  "ok");
   return TEST_RESULT_SUCCESS;
@@ -1560,7 +1575,7 @@ test_builtins_condition_case_gc ()
   EXPECT_NO_ERROR_SRC ("(define cc-throw (lambda (a) (signal 'cc-boom a)))");
   Lisp_Object err;
   TEST_ASSERT (!eval_src ("(unwind-protect"
-                          "  (condition-case (cc-throw (cons 3 4))"
+                          "  (condition-case e (cc-throw (cons 3 4))"
                           "    (cc-other 'other))"
                           "  (gc)"
                           "  (cons (cons 0 0) (cons 0 0)))",
@@ -1572,7 +1587,7 @@ test_builtins_condition_case_gc ()
                "expected error data (3 . 4)");
 
   // the clauses survive a gc in the body
-  EXPECT_FORM ("(condition-case"
+  EXPECT_FORM ("(condition-case e"
                "  (progn (gc) (cons (cons 0 0) (cons 0 0)) (signal 'cc-boom))"
                "  (cc-other 'other)"
                "  (cc-boom (car (cons 'ok nil))))",
