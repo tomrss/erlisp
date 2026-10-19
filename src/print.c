@@ -101,6 +101,29 @@ fprint_char (Lisp_Port *p, Lisp_Char c)
     }
 }
 
+static void
+fprint_list (Lisp_Port *p, Lisp_Object list, int display)
+{
+  port_write_char ('(', p);
+  fprint_form (p, f_car (list), display);
+
+  Lisp_Object tail = f_cdr (list);
+  while (consp (tail))
+    {
+      port_write_char (' ', p);
+      fprint_form (p, f_car (tail), display);
+      tail = f_cdr (tail);
+    }
+
+  if (!nil (tail))
+    {
+      port_write_string (" . ", p);
+      fprint_form (p, tail, display);
+    }
+
+  port_write_char (')', p);
+}
+
 void
 print_form (Lisp_Object form, int display)
 {
@@ -168,11 +191,7 @@ fprint_form (Lisp_Port *p, Lisp_Object form, int display)
                           unbox_string (unbox_symbol (form)->name)->size, p);
       break;
     case LISP_CONS:
-      port_printf (p, "(");
-      fprint_form (p, unbox_cons (form)->car, display);
-      port_printf (p, " . ");
-      fprint_form (p, unbox_cons (form)->cdr, display);
-      port_printf (p, ")");
+      fprint_list (p, form, display);
       break;
     case LISP_FLOT:
       fprint_float (p, unbox_float (form));

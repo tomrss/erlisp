@@ -103,6 +103,7 @@ static TestResult test_builtins_number_to_string_edge ();
 static TestResult test_builtins_string_to_number ();
 static TestResult test_builtins_format ();
 static TestResult test_builtins_write_display ();
+static TestResult test_builtins_print_list ();
 static TestResult test_builtins_sum ();
 static TestResult test_builtins_subtract ();
 static TestResult test_builtins_multiply ();
@@ -186,6 +187,7 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "string->number", .run = test_builtins_string_to_number },
   { .skip = 0, .name = "format", .run = test_builtins_format },
   { .skip = 0, .name = "write-display", .run = test_builtins_write_display },
+  { .skip = 0, .name = "print-list", .run = test_builtins_print_list },
   { .skip = 0, .name = "+", .run = test_builtins_sum },
   { .skip = 0, .name = "-", .run = test_builtins_subtract },
   { .skip = 0, .name = "*", .run = test_builtins_multiply },
@@ -641,6 +643,41 @@ test_builtins_write_display ()
   EXPECT_NO_ERROR_SRC ("(close-port wd-port)");
   EXPECT_ERROR ("(write 1 wd-port)", q_error_portclosed);
   EXPECT_ERROR ("(display 1 wd-port)", q_error_portclosed);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_print_list ()
+{
+  // proper lists: no dots, no trailing nil
+  EXPECT_FORM ("(format nil \"~s\" '(1))", "\"(1)\"");
+  EXPECT_FORM ("(format nil \"~s\" '(1 2 3))", "\"(1 2 3)\"");
+  EXPECT_FORM ("(format nil \"~s\" (cons 1 nil))", "\"(1)\"");
+
+  // nested lists
+  EXPECT_FORM ("(format nil \"~s\" '(1 (2 3) 4))", "\"(1 (2 3) 4)\"");
+  EXPECT_FORM ("(format nil \"~s\" '((1 2)))", "\"((1 2))\"");
+  EXPECT_FORM ("(format nil \"~s\" '(1 (2 (3))))", "\"(1 (2 (3)))\"");
+
+  // nil as element is printed, only the final one is not
+  EXPECT_FORM ("(format nil \"~s\" '(nil))", "\"(NIL)\"");
+  EXPECT_FORM ("(format nil \"~s\" '(1 nil 2))", "\"(1 NIL 2)\"");
+
+  // improper lists: the dot only before the last cdr, in the same parens
+  EXPECT_FORM ("(format nil \"~s\" (cons 1 2))", "\"(1 . 2)\"");
+  EXPECT_FORM ("(format nil \"~s\" '(1 2 . 3))", "\"(1 2 . 3)\"");
+  EXPECT_FORM ("(format nil \"~s\" '((1 . 2) 3))", "\"((1 . 2) 3)\"");
+  EXPECT_FORM ("(format nil \"~s\" '(1 . (2 . (3 . 4))))", "\"(1 2 3 . 4)\"");
+
+  // the mode reaches the elements, also the dotted cdr
+  EXPECT_FORM ("(format nil \"~a\" '(\"a\" b))", "\"(a b)\"");
+  EXPECT_FORM ("(format nil \"~a\" (cons ?x ?y))", "\"(x . y)\"");
+  EXPECT_FORM ("(format nil \"~s\" (cons ?x ?y))", "\"(?x . ?y)\"");
+
+  // a list built at runtime: (1 2 3 4 5 6 7 8 9)
+  EXPECT_NO_ERROR_SRC ("(define (pl-range n acc)"
+                       "  (if (< n 1) acc (pl-range (- n 1) (cons n acc))))");
+  EXPECT_INT ("(string-length (format nil \"~s\" (pl-range 9 nil)))", 19);
   return TEST_RESULT_SUCCESS;
 }
 
