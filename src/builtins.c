@@ -1123,6 +1123,26 @@ f_current_output_port ()
 }
 
 Lisp_Object
+f_set_current_input_port (Lisp_Object port)
+{
+  check_type (port, LISP_PORT);
+  if (unbox_port (port)->direction != PORT_IN)
+    invalidportdir_error (port, PORT_IN);
+  p_current_input_port = port;
+  return port;
+}
+
+Lisp_Object
+f_set_current_output_port (Lisp_Object port)
+{
+  check_type (port, LISP_PORT);
+  if (unbox_port (port)->direction != PORT_OUT)
+    invalidportdir_error (port, PORT_OUT);
+  p_current_output_port = port;
+  return port;
+}
+
+Lisp_Object
 f_open_input_file (Lisp_Object path)
 {
   check_type (path, LISP_STRG);
@@ -1569,6 +1589,10 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("current-input-port", 0, 0, f_current_input_port));
   obarray_put (o,
                DEFSUBR ("current-output-port", 0, 0, f_current_output_port));
+  obarray_put (o, DEFSUBR ("set-current-input-port!", 1, 1,
+                           f_set_current_input_port));
+  obarray_put (o, DEFSUBR ("set-current-output-port!", 1, 1,
+                           f_set_current_output_port));
   obarray_put (o, DEFSUBR ("open-input-file", 1, 1, f_open_input_file));
   obarray_put (o, DEFSUBR ("open-output-file", 1, 1, f_open_output_file));
   obarray_put (o, DEFSUBR ("open-input-string", 1, 1, f_open_input_string));

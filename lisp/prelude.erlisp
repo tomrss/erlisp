@@ -62,3 +62,51 @@
 
 (define (list . rest)
   rest)
+
+
+;;;; ports
+
+(define (call-with-port port proc)
+  (unwind-protect
+      (proc port)
+    (close-port port)))
+
+(define (with-output-to-port port thunk)
+  (let ((old (current-output-port)))
+    (set-current-output-port! port)
+    (unwind-protect
+        (thunk)
+      (set-current-output-port! old))))
+
+(define (with-output-to-string thunk)
+  (call-with-port (open-output-string)
+    (lambda (p)
+      (with-output-to-port p
+        (lambda ()
+          (thunk)
+          (get-output-string p))))))
+
+(define (with-output-to-file path thunk)
+  (call-with-port (open-output-file path)
+    (lambda (p)
+      (with-output-to-port p
+        thunk))))
+
+(define (with-input-from-port port thunk)
+  (let ((old (current-input-port)))
+    (set-current-input-port! port)
+    (unwind-protect
+        (thunk)
+      (set-current-input-port! old))))
+
+(define (with-input-from-file path thunk)
+  (call-with-port (open-input-file path)
+    (lambda (p)
+      (with-input-from-port p
+        thunk))))
+
+(define (with-input-from-string string thunk)
+  (call-with-port (open-input-string string)
+    (lambda (p)
+      (with-input-from-port p
+        thunk))))

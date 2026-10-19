@@ -520,6 +520,8 @@ Lisp_Object f_output_port_p (Lisp_Object o);
 Lisp_Object f_eof_object_p (Lisp_Object o);
 Lisp_Object f_current_input_port ();
 Lisp_Object f_current_output_port ();
+Lisp_Object f_set_current_input_port (Lisp_Object port);
+Lisp_Object f_set_current_output_port (Lisp_Object port);
 Lisp_Object f_open_input_file (Lisp_Object path);
 Lisp_Object f_open_output_file (Lisp_Object path);
 Lisp_Object f_open_input_string (Lisp_Object string);
