@@ -398,7 +398,6 @@ define (Lisp_Object env, Lisp_Object form)
     }
   else
     {
-      unbox_symbol (var)->localbound = 1;
       env_define (env, var, value);
     }
 
@@ -692,6 +691,7 @@ Lisp_Object
 condition_case (Lisp_Object env, Lisp_Object form)
 {
   Lisp_Object errtobind = f_car (form);
+  check_type (errtobind, LISP_SYMB);
   Lisp_Object body = f_car (f_cdr (form));
   Lisp_Object conds = f_cdr (f_cdr (form));
   Lisp_Object res;

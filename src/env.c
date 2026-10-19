@@ -15,6 +15,10 @@ env_new (Lisp_Object parent)
 Lisp_Object
 env_define (Lisp_Object env, Lisp_Object symbol, Lisp_Object value)
 {
+  // dirty trick to optimize lookups of purely global symbols, see
+  // eval_symbol: a symbol in an env is local bound
+  unbox_symbol (symbol)->localbound = 1;
+
   Lisp_Object newcell = f_cons (symbol, value);
   // put new cell at the head of alist after the anchor
   Lisp_Object envnoanchor = f_cdr (env);
