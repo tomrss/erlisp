@@ -503,6 +503,7 @@ Lisp_Object f_if (Lisp_Object form);
 Lisp_Object f_cond (Lisp_Object form);
 Lisp_Object f_lambda (Lisp_Object form);
 Lisp_Object f_define (Lisp_Object form);
+Lisp_Object f_defined_p (Lisp_Object symbol);
 Lisp_Object f_format (int argc, Lisp_Object *argv);
 Lisp_Object f_load (Lisp_Object path);
 Lisp_Object f_load_from_port (Lisp_Object port);

@@ -738,6 +738,15 @@ f_define (Lisp_Object form)
 }
 
 Lisp_Object
+f_defined_p (Lisp_Object symbol)
+{
+  check_type (symbol, LISP_SYMB);
+  if (!unbound (env_lookup (env_current (), symbol)))
+    return q_t;
+  return BOOL (!unbound (unbox_symbol (symbol)->value));
+}
+
+Lisp_Object
 f_and (Lisp_Object form)
 {
   Lisp_Object tail = form;
@@ -1571,6 +1580,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("cond", 1, UNEVALLED, f_cond));
   q_lambda = obarray_put (o, DEFSUBR ("lambda", 2, UNEVALLED, f_lambda));
   q_define = obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
+  obarray_put (o, DEFSUBR ("defined?", 1, 1, f_defined_p));
   obarray_put (o, DEFSUBR ("format", 2, MANY, f_format));
   obarray_put (o, DEFSUBR ("load", 1, 1, f_load));
   obarray_put (o, DEFSUBR ("load-from-port", 0, 1, f_load_from_port));

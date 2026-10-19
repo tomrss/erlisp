@@ -12,8 +12,13 @@
     (cons 'cons (cons (qq-expand (car x)) (cons (qq-expand (cdr x)) nil))))))
 
 (defmacro (quasiquote x)
-    (qq-expand x))
+  (qq-expand x))
 
+(defmacro (unquote x)
+  (signal 'syntax-error '("unquote outside quasiquote")))
+
+(defmacro (unquote-splicing x)
+  (signal 'syntax-error '("unquote-splicing outside quasiquote")))
 
 ;;; primitives
 
@@ -52,16 +57,13 @@
          (let* ,(cdr args) ,@body))
       `(progn ,@body)))
 
-(defmacro (letrec* args . body)
-  `((lambda ()
-      ,(map ,(lambda (x)
-               `(define (car x) (cadr x)))
-            (car args))
-      ,@body)
-    ,@(map cadr args)))
-
 (define (list . rest)
   rest)
+
+(define (pad-right s n)
+  (if (< (string-length s) n)
+      (pad-right (concat s " ") n)
+      s))
 
 
 ;;;; ports
@@ -110,3 +112,77 @@
     (lambda (p)
       (with-input-from-port p
         thunk))))
+
+;;; testing
+
+(define (test-fail msg text)
+  (signal 'test-failed
+          (list (if msg (format nil "~a: ~a" (car msg) text) text))))
+
+(define (test-assert form value msg)
+  (unless value
+    (test-fail msg (format nil "~s: expected true, got ~s" form value))))
+
+(define (test-assert-equal expected form actual msg)
+  (unless (equal? expected actual)
+    (test-fail msg (format nil "~s: expected ~s, got ~s" form expected actual))))
+
+(define (test-assert-error errsym form thunk msg)
+  (let ((outcome (condition-case
+                     err
+                     (list 'value (thunk))
+                   (t (list 'error (error-symbol err))))))
+    (cond
+     ((eq? (car outcome) 'value)
+      (test-fail msg (format nil "~s: expected error ~s, got ~s"
+                             form errsym (cadr outcome))))
+     ((nil? (eq? (cadr outcome) errsym))
+      (test-fail msg (format nil "~s: expected error ~s, got error ~s"
+                             form errsym (cadr outcome)))))))
+
+(defmacro (assert form . msg)
+  `(test-assert ',form ,form (list ,@msg)))
+
+(defmacro (assert-equal expected form . msg)
+  `(test-assert-equal ,expected ',form ,form (list ,@msg)))
+
+(defmacro (assert-error errsym form . msg)
+  `(test-assert-error ,errsym ',form (lambda () ,form) (list ,@msg)))
+
+(define test-cases '())
+
+(defmacro (deftest name . body)
+  `(set! test-cases
+         (append test-cases (list (cons ',(car name) (lambda () ,@body))))))
+
+(define (test-run-cases test-cases-alist)
+  (define failed 0)
+  (define executed 0)
+  (define (delegate test-cases-alist)
+    (when test-cases-alist
+      (let* ((head (car test-cases-alist))
+             (tail (cdr test-cases-alist))
+             (test-name (car head))
+             (test-thunk (cdr head)))
+        (format t "test   ~a ..." (pad-right (symbol->string test-name) 30))
+        (condition-case
+            err
+            (progn
+             (test-thunk)
+             (format t "SUCCESS~%"))
+          (test-failed
+           (format t "FAILED ~s~%" (error-data err))
+           (set! failed (+ failed 1)))
+          (t
+           (format t "FAILED : ~a : ~s~%" (error-symbol err) (error-data err))
+           (set! failed (+ failed 1))))
+        (set! executed (+ executed 1))
+        (delegate tail))))
+  (delegate test-cases-alist)
+  (format t "~%Test execution completed: ~a executed, ~a failed~%"
+          executed failed)
+  (if (> failed 0)
+      (signal 'test-cases-failed 'nil)))
+
+(define (test-run)
+  (test-run-cases test-cases))

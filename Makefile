@@ -37,6 +37,7 @@ $(OBJ_DIR):
 
 test: test_$(TARGET)
 	./$(TEST_DIR)/$<
+	./$(TARGET) lisp/prelude-test.erlisp
 
 test-debug: CFLAGS = -Wall -Wextra -O0 -g -fsanitize=address -DHAVE_READLINE=1 -std=gnu23 --embed-dir=lisp
 test-debug: LDFLAGS = -g -fsanitize=address
@@ -47,7 +48,7 @@ test-debug: test_$(TARGET)
 $(OBJ_DIR)/test_%.o: $(TEST_DIR)/test_%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-test_$(TARGET): $(OBJECTS_NOMAIN) $(TEST_OBJECTS)
+test_$(TARGET): $(OBJECTS_NOMAIN) $(TEST_OBJECTS) $(TARGET)
 	$(CC) $(LDFLAGS) $(OBJECTS_NOMAIN) $(TEST_OBJECTS) $(LDLIBS) -o $(TEST_DIR)/test_$(TARGET)
 
 clean:

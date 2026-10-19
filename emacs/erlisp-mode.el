@@ -26,14 +26,43 @@
 ;; TODO: TEMP for dev
 (defvar erlisp-executable (expand-file-name "../erlisp"))
 
+(defconst erlisp-font-lock-keywords
+  `(("(\\(defmacro\\)\\_>\\s-*(?\\(\\(?:\\sw\\|\\s_\\)+\\)?"
+     (1 font-lock-keyword-face)
+     (2 font-lock-function-name-face nil t))
+    ("(\\(deftest\\)\\_>\\s-*(\\(\\(?:\\sw\\|\\s_\\)+\\)"
+     (1 font-lock-keyword-face)
+     (2 font-lock-function-name-face))
+    (,(concat "(" (regexp-opt '("progn" "condition-case" "unwind-protect"
+                                "test-run")
+                              t)
+              "\\_>")
+     (1 font-lock-keyword-face))
+    (,(concat "(" (regexp-opt '("assert" "assert-equal" "assert-error"
+                                "signal")
+                              t)
+              "\\_>")
+     (1 font-lock-builtin-face)))
+  "Extra font-lock keywords for Erlisp, on top of the Scheme ones.")
+
+;; scheme-indent-function is a global symbol property: these also apply
+;; to scheme-mode buffers
+(dolist (spec '((defmacro . 1)
+                (deftest . 1)
+                (condition-case . 2)
+                (unwind-protect . 1)
+                (call-with-port . 1)
+                (with-output-to-port . 1)
+                (with-output-to-file . 1)
+                (with-input-from-port . 1)
+                (with-input-from-file . 1)
+                (with-input-from-string . 1)))
+  (put (car spec) 'scheme-indent-function (cdr spec)))
+
 (define-derived-mode erlisp-mode
   scheme-mode "Erlisp"
   "Major mode for Erlisp."
-  (font-lock-add-keywords
-   nil
-   '(("(\\(defmacro\\)\\_>\\s-*\\(\\(?:\\sw\\|\\s_\\)+\\)?"
-      (1 font-lock-keyword-face)
-      (2 font-lock-function-name-face nil t)))))
+  (font-lock-add-keywords nil erlisp-font-lock-keywords))
 
 (add-to-list 'auto-mode-alist '("\\.erlisp\\'" . erlisp-mode))
 
