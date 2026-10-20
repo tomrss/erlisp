@@ -472,6 +472,7 @@ Lisp_Object f_assoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_assq (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_rassoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_rassq (Lisp_Object key, Lisp_Object alist);
+Lisp_Object f_member (Lisp_Object elt, Lisp_Object list);
 Lisp_Object f_memq (Lisp_Object elt, Lisp_Object list);
 Lisp_Object f_append (Lisp_Object list, Lisp_Object o);
 Lisp_Object f_string_equal_p (Lisp_Object x, Lisp_Object y);

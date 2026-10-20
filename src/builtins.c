@@ -52,13 +52,15 @@ Lisp_Object l_globalenv;
 
 Lisp_Object *currentenv;
 
+typedef Lisp_Object (*lisp_2_pred) (Lisp_Object x, Lisp_Object y);
+
 static void obarray_register_builtins (Lisp_Object obarray);
 static Lisp_Object assoc_w_pred (Lisp_Object key, Lisp_Object alist,
-                                 Lisp_Object (*keypred) (Lisp_Object k1,
-                                                         Lisp_Object k2));
+                                 lisp_2_pred keypred);
 static Lisp_Object rassoc_w_pred (Lisp_Object key, Lisp_Object alist,
-                                  Lisp_Object (*keypred) (Lisp_Object k1,
-                                                          Lisp_Object k2));
+                                  lisp_2_pred keypred);
+static Lisp_Object member_w_pred (Lisp_Object elt, Lisp_Object lst,
+                                  lisp_2_pred eltpred);
 
 static inline Lisp_Port *safe_unbox_optionl_in_port (Lisp_Object port);
 static inline Lisp_Port *safe_unbox_optionl_out_port (Lisp_Object port);
@@ -188,19 +190,15 @@ f_rassq (Lisp_Object key, Lisp_Object alist)
 }
 
 Lisp_Object
+f_member (Lisp_Object elt, Lisp_Object list)
+{
+  return member_w_pred (elt, list, &f_equal_p);
+}
+
+Lisp_Object
 f_memq (Lisp_Object elt, Lisp_Object list)
 {
-  if (nil (list))
-    return q_nil;
-  check_type (list, LISP_CONS);
-  Lisp_Object tail = list;
-  while (!nil (tail))
-    {
-      if (eq (elt, f_car (tail)))
-        return tail;
-      tail = f_cdr (tail);
-    }
-  return q_nil;
+  return member_w_pred (elt, list, &f_eq_p);
 }
 
 Lisp_Object
@@ -1551,6 +1549,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("rassoc", 2, 2, f_rassoc));
   obarray_put (o, DEFSUBR ("rassq", 2, 2, f_rassq));
   obarray_put (o, DEFSUBR ("memq", 2, 2, f_memq));
+  obarray_put (o, DEFSUBR ("member", 2, 2, f_member));
   obarray_put (o, DEFSUBR ("string=?", 2, 2, f_string_equal_p));
   obarray_put (o, DEFSUBR ("string-length", 1, 1, f_string_length));
   obarray_put (o, DEFSUBR ("string-ref", 2, 2, f_string_ref));
@@ -1599,8 +1598,8 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("current-input-port", 0, 0, f_current_input_port));
   obarray_put (o,
                DEFSUBR ("current-output-port", 0, 0, f_current_output_port));
-  obarray_put (o, DEFSUBR ("set-current-input-port!", 1, 1,
-                           f_set_current_input_port));
+  obarray_put (
+      o, DEFSUBR ("set-current-input-port!", 1, 1, f_set_current_input_port));
   obarray_put (o, DEFSUBR ("set-current-output-port!", 1, 1,
                            f_set_current_output_port));
   obarray_put (o, DEFSUBR ("open-input-file", 1, 1, f_open_input_file));
@@ -1625,8 +1624,7 @@ obarray_register_builtins (Lisp_Object o)
 // helpers impl
 
 static Lisp_Object
-assoc_w_pred (Lisp_Object key, Lisp_Object alist,
-              Lisp_Object (*keypred) (Lisp_Object k1, Lisp_Object k2))
+assoc_w_pred (Lisp_Object key, Lisp_Object alist, lisp_2_pred keypred)
 {
   Lisp_Object tail;
   for (tail = alist; !nil (tail); tail = f_cdr (tail))
@@ -1643,8 +1641,7 @@ assoc_w_pred (Lisp_Object key, Lisp_Object alist,
 }
 
 static Lisp_Object
-rassoc_w_pred (Lisp_Object key, Lisp_Object alist,
-               Lisp_Object (*keypred) (Lisp_Object k1, Lisp_Object k2))
+rassoc_w_pred (Lisp_Object key, Lisp_Object alist, lisp_2_pred keypred)
 {
   Lisp_Object tail;
   for (tail = alist; !nil (tail); tail = f_cdr (tail))
@@ -1656,6 +1653,22 @@ rassoc_w_pred (Lisp_Object key, Lisp_Object alist,
         continue;
       if (keypred (f_cdr (elt), key) != q_nil)
         return elt;
+    }
+  return q_nil;
+}
+
+static Lisp_Object
+member_w_pred (Lisp_Object elt, Lisp_Object list, lisp_2_pred eltpred)
+{
+  if (nil (list))
+    return q_nil;
+  check_type (list, LISP_CONS);
+  Lisp_Object tail = list;
+  while (!nil (tail))
+    {
+      if (!nil (eltpred (elt, f_car (tail))))
+        return tail;
+      tail = f_cdr (tail);
     }
   return q_nil;
 }

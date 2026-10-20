@@ -65,6 +65,10 @@
       (pad-right (concat s " ") n)
       s))
 
+(defmacro (add-to-list! lst elt)
+  `(if (member ,elt ,lst)
+       ,lst
+       (set! ,lst (cons ,elt ,lst))))
 
 ;;;; ports
 
@@ -149,11 +153,11 @@
 (defmacro (assert-error errsym form . msg)
   `(test-assert-error ,errsym ',form (lambda () ,form) (list ,@msg)))
 
-(define test-cases '())
+(define *test-cases* '())
 
 (defmacro (deftest name . body)
-  `(set! test-cases
-         (append test-cases (list (cons ',(car name) (lambda () ,@body))))))
+  `(set! *test-cases*
+         (append *test-cases* (list (cons ',(car name) (lambda () ,@body))))))
 
 (define (test-run-cases test-cases-alist)
   (define failed 0)
@@ -185,4 +189,35 @@
       (signal 'test-cases-failed 'nil)))
 
 (define (test-run)
-  (test-run-cases test-cases))
+  (test-run-cases *test-cases*))
+
+;;; load path and simple modules
+
+;; modules are simple and emacs-like, no namespacing or other cmplx feats
+
+(define *load-path* '("."))
+
+(define *features* '())
+
+(define *features-loading* '())
+
+(define (require mod)
+  (define (require-in-dirs mod dirs)
+    (unless dirs
+      (signal 'require-error `("module not found" ,mod)))
+    (let ((dir (car dirs))
+          (tail (cdr dirs)))
+      (condition-case err
+          (load (concat dir "/" (symbol->string mod) ".erlisp"))
+        ;; TODO this also captures file-error signaled in module being loaded!
+        (file-error (require-in-dirs mod tail)))))
+  (unless (memq mod *features*)
+    (when (memq mod *features-loading*)
+      (signal 'require-error
+              `("circular dependency detected" ,mod ,(car *features-loading*))))
+    (let ((old-features-loading *features-loading*))
+      (set! *features-loading* (cons mod *features-loading*))
+      (unwind-protect
+          (require-in-dirs mod *load-path*)
+        (set! *features-loading* old-features-loading)))
+    (set! *features* (cons mod *features*))))
