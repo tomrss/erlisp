@@ -24,7 +24,18 @@
 ;;; Code:
 
 ;; TODO: TEMP for dev
-(defvar erlisp-executable (expand-file-name "../erlisp"))
+(defvar erlisp-executable nil
+  "Path to the erlisp executable.
+If nil, use erlisp in the project root, or in `default-directory'
+outside of a project.")
+
+(defun erlisp--executable ()
+  "Return the erlisp executable to run."
+  (or erlisp-executable
+      (expand-file-name "erlisp"
+                        (if-let ((project (project-current)))
+                            (project-root project)
+                          default-directory))))
 
 (defconst erlisp-font-lock-keywords
   `(("(\\(defmacro\\)\\_>\\s-*(?\\(\\(?:\\sw\\|\\s_\\)+\\)?"
@@ -71,7 +82,7 @@
   (interactive)
   (pop-to-buffer
    (compilation-start
-    erlisp-executable
+    (erlisp--executable)
     t
     (lambda (_) (format "*erlisp: %s *" default-directory)))))
 
