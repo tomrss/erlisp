@@ -50,8 +50,6 @@ Lisp_Object p_current_input_port;
 Lisp_Object p_current_output_port;
 Lisp_Object l_globalenv;
 
-Lisp_Object *currentenv;
-
 typedef Lisp_Object (*lisp_2_pred) (Lisp_Object x, Lisp_Object y);
 
 static void obarray_register_builtins (Lisp_Object obarray);
@@ -1488,8 +1486,6 @@ init_builtins ()
 
   l_globalenv = env_new (q_nil);
   stack_init (l_globalenv);
-  currentenv = malloc (sizeof (Lisp_Object));
-  *currentenv = l_globalenv;
 
   init_prelude ();
 }
