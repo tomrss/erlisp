@@ -474,10 +474,19 @@ gcmarkobj (Lisp_Object obj)
     case LISP_CONS:
       if (!blkgcmark (heap->conses, unbox_cons (obj)))
         break;
-      gcmarkobj (f_car (obj));
-      // FIXME in case of a long list, this recursion could be FATAL.
-      // replace this with explicit iteration on the cdr
-      gcmarkobj (f_cdr (obj));
+      {
+        gcmarkobj (f_car (obj));
+        Lisp_Object tail = f_cdr (obj);
+        while (consp (tail))
+          {
+            if (!blkgcmark (heap->conses, unbox_cons (tail)))
+              break;
+            gcmarkobj (f_car (tail));
+            tail = f_cdr (tail);
+          }
+        // if not nil, this is improper list or already visited list
+        gcmarkobj (tail);
+      }
       break;
     case LISP_VECT:
       if (is_small_vector (unbox_vector (obj)->size))
