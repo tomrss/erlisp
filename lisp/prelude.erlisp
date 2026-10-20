@@ -117,6 +117,19 @@
       (with-input-from-port p
         thunk))))
 
+;;; load
+
+
+(define (load path)
+  (define (eval-read-sexps port)
+    (let ((sexp (read port)))
+      (if (eof-object? sexp)
+          t
+          (eval sexp)
+          (eval-read-sexps port))))
+  (call-with-port (open-input-file path)
+    eval-read-sexps))
+
 ;;; testing
 
 (define (test-fail msg text)

@@ -431,10 +431,12 @@ test_eval_load ()
   unbox_symbol (symb)->value = cell;
   obarray_put (v_obarray, symb);
 
+  // load is defined in the prelude
+  Lisp_Object form
+      = mklist (2, sym ("load"), make_string ("test/assets/src-load.tl"));
   Lisp_Object res;
-  TEST_ASSERT (
-      condition_case_1 (f_load, make_string ("test/assets/src-load.tl"), &res),
-      "unexpected %s", errname (res));
+  TEST_ASSERT (condition_case_2 (eval_toplevel, l_globalenv, form, &res),
+               "unexpected %s", errname (res));
   TEST_ASSERT (eq (res, q_t), "expected load to return t");
 
   // the second form reads the value set by the first one

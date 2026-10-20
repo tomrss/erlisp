@@ -85,8 +85,9 @@ main (int argc, char **argv)
 
   // parse and eval file
 
-  Lisp_Object filename = make_string (argv[1]);
-  f_load (filename);
+  Lisp_Object load = f_intern (make_string ("load"));
+  Lisp_Object path = make_string (argv[1]);
+  f_eval (f_cons (load, f_cons (path, q_nil)));
 
   return 0;
 }
