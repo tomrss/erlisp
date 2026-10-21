@@ -274,7 +274,7 @@ test_eval_lambda_2args ()
 
   args[0] = arg1 = make_str_symbol ("arg1");
   args[1] = arg2 = make_str_symbol ("arg2");
-  // make_lambda does not mark args as local bound, f_lambda does
+  // make_lambda does not mark args as local bound, the lambda form does
   unbox_symbol (arg1)->localbound = 1;
   unbox_symbol (arg2)->localbound = 1;
 
@@ -337,7 +337,7 @@ test_eval_lambda_nested ()
   fun1args[0] = fun1arg1 = make_str_symbol ("arg1");
   fun1args[1] = fun1arg2 = make_str_symbol ("arg2");
   fun2args[0] = fun2arg1 = make_str_symbol ("arg1");
-  // make_lambda does not mark args as local bound, f_lambda does
+  // make_lambda does not mark args as local bound, the lambda form does
   unbox_symbol (fun1arg1)->localbound = 1;
   unbox_symbol (fun1arg2)->localbound = 1;
   unbox_symbol (fun2arg1)->localbound = 1;
@@ -376,14 +376,15 @@ test_eval_lambda_nested ()
 static TestResult
 test_eval_progn ()
 {
-  Lisp_Object form
-      = f_cons (make_string ("test"),
-                f_cons (f_cons (DEFSUBR ("strlen", 1, 1, f_string_length),
-                                f_cons (make_string ("test"), q_nil)),
-                        q_nil));
+  Lisp_Object form = f_cons (
+      sym ("progn"),
+      f_cons (make_string ("test"),
+              f_cons (f_cons (DEFSUBR ("strlen", 1, 1, f_string_length),
+                              f_cons (make_string ("test"), q_nil)),
+                      q_nil)));
 
   Lisp_Object result;
-  TEST_ASSERT (condition_case_2 (progn, l_globalenv, form, &result),
+  TEST_ASSERT (condition_case_2 (eval, l_globalenv, form, &result),
                "unexpected %s", errname (result));
   TEST_ASSERT (eq (result, box_int (4)), "wrong");
 
@@ -393,12 +394,14 @@ test_eval_progn ()
 static TestResult
 test_eval_progn_single ()
 {
-  Lisp_Object form = f_cons (f_cons (DEFSUBR ("strlen", 1, 1, f_string_length),
-                                     f_cons (make_string ("test"), q_nil)),
-                             q_nil);
+  Lisp_Object form = f_cons (
+      sym ("progn"),
+      f_cons (f_cons (DEFSUBR ("strlen", 1, 1, f_string_length),
+                      f_cons (make_string ("test"), q_nil)),
+              q_nil));
 
   Lisp_Object result;
-  TEST_ASSERT (condition_case_2 (progn, l_globalenv, form, &result),
+  TEST_ASSERT (condition_case_2 (eval, l_globalenv, form, &result),
                "unexpected %s", errname (result));
   TEST_ASSERT (eq (result, box_int (4)), "wrong");
 
@@ -409,15 +412,15 @@ static TestResult
 test_eval_quote ()
 {
   Lisp_Object form
-      = f_cons (DEFSUBR ("quote", 1, UNEVALLED, f_quote),
+      = f_cons (q_quote,
                 f_cons (f_cons (DEFSUBR ("strlen", 1, 1, f_string_length),
                                 f_cons (make_string ("test"), q_nil)),
                         q_nil));
 
   Lisp_Object result;
-  TEST_ASSERT (condition_case_2 (progn, l_globalenv, form, &result),
+  TEST_ASSERT (condition_case_2 (eval, l_globalenv, form, &result),
                "unexpected %s", errname (result));
-  TEST_CHECK_TYPE ("quoted", form, LISP_CONS);
+  TEST_CHECK_TYPE ("quoted", result, LISP_CONS);
 
   return TEST_RESULT_SUCCESS;
 }

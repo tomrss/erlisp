@@ -9,13 +9,9 @@ Lisp_Object eval_symbol (Lisp_Object env, Lisp_Object form);
 Lisp_Object call_function (Lisp_Object env, Lisp_Object form);
 Lisp_Object call_subr (Lisp_Subr *usubr, int maxargs, int arity,
                        Lisp_Object *argvals);
-Lisp_Object call_unevalled_subr (Lisp_Subr *usubr, Lisp_Object form);
 Lisp_Object call_lambda (Lisp_Lambda *ulambda, int nargs,
                          Lisp_Object *argvals);
 Lisp_Object apply (Lisp_Object env, Lisp_Object fun, Lisp_Object args);
-Lisp_Object progn (Lisp_Object env, Lisp_Object form);
-Lisp_Object define (Lisp_Object env, Lisp_Object form);
-Lisp_Object unwind_protect (Lisp_Object env, Lisp_Object form);
 Lisp_Object macroexpand_all (Lisp_Object form);
 Lisp_Object macroexpand_1 (Lisp_Object form);
 
@@ -30,7 +26,6 @@ int condition_case_2 (Lisp_Object (*fun) (Lisp_Object, Lisp_Object),
                       Lisp_Object arg1, Lisp_Object arg2, Lisp_Object *out);
 int condition_case_n (Lisp_Object (*fun) (int, Lisp_Object *), int nargs,
                       Lisp_Object *args, Lisp_Object *out);
-Lisp_Object condition_case (Lisp_Object env, Lisp_Object form);
 
 int safe_eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out);
 

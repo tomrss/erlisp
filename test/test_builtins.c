@@ -15,8 +15,6 @@ static Lisp_Object parse_src (const char *src);
 static int eval_src (const char *src, Lisp_Object *out);
 static int same_form (Lisp_Object x, Lisp_Object y);
 static const char *symname (Lisp_Object symbol);
-// (test-catch form): evaluates form under a handler, returns caught on error
-static void defsubr_test_catch ();
 
 #define EXPECT_NO_ERROR(src, res)                                             \
   TEST_ASSERT (eval_src (src, &res), "%s: unexpected %s", src,                \
@@ -295,21 +293,6 @@ symname (Lisp_Object symbol)
   if (type_of (symbol) != LISP_SYMB)
     return "<not a symbol>";
   return unbox_string (unbox_symbol (symbol)->name)->data;
-}
-
-static Lisp_Object
-test_catch (Lisp_Object form)
-{
-  Lisp_Object res;
-  if (safe_eval (env_current (), f_car (form), &res))
-    return res;
-  return f_intern (make_string ("caught"));
-}
-
-static void
-defsubr_test_catch ()
-{
-  obarray_put (v_obarray, DEFSUBR ("test-catch", 1, UNEVALLED, test_catch));
 }
 
 // test cases implementation
@@ -1414,17 +1397,16 @@ test_builtins_unwind_protect_error ()
 static TestResult
 test_builtins_unwind_protect_handler ()
 {
-  defsubr_test_catch ();
-  EXPECT_FORM ("(test-catch (signal 'up-boom))", "caught");
-
   // the handler is between the two unwind-protects: the error runs only the
   // inner cleanup, the outer one runs at its own exit
   EXPECT_NO_ERROR_SRC ("(define up-log nil)");
   EXPECT_NO_ERROR_SRC (
       "(unwind-protect"
       "  (progn"
-      "    (test-catch (unwind-protect (signal 'up-boom)"
-      "                  (set! up-log (cons 'inner up-log))))"
+      "    (condition-case e"
+      "        (unwind-protect (signal 'up-boom)"
+      "          (set! up-log (cons 'inner up-log)))"
+      "      (up-boom 'caught))"
       "    (set! up-log (cons 'after up-log)))"
       "  (set! up-log (cons 'outer up-log)))");
   EXPECT_FORM ("up-log", "(outer after inner)");

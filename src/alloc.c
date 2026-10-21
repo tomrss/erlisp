@@ -303,6 +303,7 @@ make_symbol (Lisp_Object name)
   symbol->value = q_unbound;
   symbol->next = NULL;
   symbol->localbound = 0;
+  symbol->special = SF_NONE;
 
   return box_symbol (symbol);
 }
@@ -364,7 +365,7 @@ make_lambda (int minargs, int maxargs, int nargs, Lisp_Object env,
 Lisp_Object
 defsubr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 {
-  if (maxargs != UNEVALLED && maxargs != MANY && maxargs > 8)
+  if (maxargs != MANY && maxargs > 8)
     internal_error ("Cannot define subr with %d>8 maxargs, use MANY", maxargs);
 
   Lisp_Object subr = make_subr (name, minargs, maxargs, fun);

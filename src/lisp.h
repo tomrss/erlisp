@@ -19,7 +19,6 @@
 #define FLOTSHIFT 32
 
 #define MANY 999
-#define UNEVALLED 888
 
 // value of lisp_port current when nothing was peeked, must differ from EOF
 #define PORT_NOPEEK -2
@@ -145,10 +144,25 @@ struct lisp_string
   char data[];
 };
 
+enum special_form
+{
+  SF_NONE = 0,
+  SF_QUOTE,
+  SF_IF,
+  SF_PROGN,
+  SF_LAMBDA,
+  SF_DEFINE,
+  SF_SETQ,
+  SF_UNWIND_PROTECT,
+  SF_CONDITION_CASE,
+};
+
 struct lisp_symbol
 {
   // whether symbol has let or lambda local bindings; if false, it is global
   char localbound;
+  // special form named by the symbol, SF_NONE for none
+  char special;
   Lisp_Object name;
   // this value is ONLY for global scope. the couple localbound-value
   // gives us a simple way to avoid keeping a separate hash table for
@@ -170,10 +184,8 @@ union lisp_subr_fun
   lisp_subr_fun_6 f6;
   lisp_subr_fun_7 f7;
   lisp_subr_fun_8 f8;
-  // sorry for for magic numbers 888 and 999, it's a dirty trick with
-  // a macro.
-  // TODO: REMOVE THIS call these fUNEVALLED and fMANY
-  lisp_subr_fun_1 f888;    /* unevalled */
+  // sorry for for magic number 999, it's a dirty trick with a macro.
+  // TODO: REMOVE THIS call it fMANY
   lisp_subr_fun_many f999; /* many */
 };
 
@@ -464,7 +476,6 @@ Lisp_Object f_string_p (Lisp_Object o);
 Lisp_Object f_vector_p (Lisp_Object o);
 Lisp_Object f_char_p (Lisp_Object o);
 Lisp_Object f_null_p (Lisp_Object o);
-Lisp_Object f_setq (Lisp_Object form);
 Lisp_Object f_eval (Lisp_Object form);
 Lisp_Object f_apply (Lisp_Object fun, Lisp_Object args);
 Lisp_Object f_macroexpand_1 (Lisp_Object form);
@@ -496,11 +507,6 @@ Lisp_Object f_ge (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_geq (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_le (Lisp_Object x, Lisp_Object y);
 Lisp_Object f_leq (Lisp_Object x, Lisp_Object y);
-Lisp_Object f_progn (Lisp_Object form);
-Lisp_Object f_quote (Lisp_Object form);
-Lisp_Object f_if (Lisp_Object form);
-Lisp_Object f_lambda (Lisp_Object form);
-Lisp_Object f_define (Lisp_Object form);
 Lisp_Object f_defined_p (Lisp_Object symbol);
 Lisp_Object f_format (int argc, Lisp_Object *argv);
 Lisp_Object f_read (Lisp_Object string);
@@ -534,8 +540,6 @@ Lisp_Object f_write_char (Lisp_Object c, Lisp_Object port);
 Lisp_Object f_write (Lisp_Object obj, Lisp_Object port);
 Lisp_Object f_display (Lisp_Object obj, Lisp_Object port);
 Lisp_Object f_flush_output_port (Lisp_Object port);
-Lisp_Object f_unwind_protect (Lisp_Object form);
-Lisp_Object f_condition_case (Lisp_Object form);
 
 extern Lisp_Object q_nil;
 extern Lisp_Object q_t;

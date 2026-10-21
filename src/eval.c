@@ -24,6 +24,19 @@ struct handler
 static struct handler handlers[HANDLERSIZE];
 static int handlerdepth = 0;
 
+static inline Lisp_Object eval_special_form (Lisp_Object env,
+                                             Lisp_Object form);
+static inline Lisp_Object eval_quote (Lisp_Object env, Lisp_Object form);
+static inline Lisp_Object eval_if (Lisp_Object env, Lisp_Object form);
+static inline Lisp_Object eval_progn (Lisp_Object env, Lisp_Object form);
+static inline Lisp_Object eval_lambda (Lisp_Object env, Lisp_Object form);
+static inline Lisp_Object eval_define (Lisp_Object env, Lisp_Object form);
+static inline Lisp_Object eval_setq (Lisp_Object env, Lisp_Object form);
+static inline Lisp_Object eval_unwind_protect (Lisp_Object env,
+                                               Lisp_Object form);
+static inline Lisp_Object eval_condition_case (Lisp_Object env,
+                                               Lisp_Object form);
+
 struct handler *
 push_handler (int stackind)
 {
@@ -88,7 +101,10 @@ eval (Lisp_Object env, Lisp_Object form)
       res = eval_symbol (env, form);
       break;
     case LISP_CONS:
-      res = call_function (env, form);
+      if (symbolp (f_car (form)) && unbox_symbol (f_car (form))->special)
+        res = eval_special_form (env, form);
+      else
+        res = call_function (env, form);
       break;
     }
 
@@ -139,10 +155,6 @@ apply_internal (Lisp_Object fun, int nargs, Lisp_Object *args)
 
   int minargs = header->minargs;
   int maxargs = header->maxargs;
-
-  if (maxargs == UNEVALLED)
-    // special form not appliable
-    invalidfunc_error (fun);
 
   if (nargs < minargs || nargs > maxargs)
     funcargs_error (minargs, maxargs, nargs);
@@ -211,36 +223,6 @@ call_function (Lisp_Object env, Lisp_Object form)
   else
     invalidfunc_error (fun);
 
-  struct lisp_callable_header *header = unbox_pointer (fun);
-  int maxargs = header->maxargs;
-
-  if (maxargs == UNEVALLED)
-    {
-      // this UNEVALLED in maxargs is a old dirty trick in emacs lisp
-      // for handling special forms
-      if (type_of (fun) == LISP_LMBD)
-        // not supported YET but it would be fun!!
-        // https://web.cs.wpi.edu/~jshutt/dissertation/etd-090110-124904-Shutt-Dissertation.pdf
-        internal_error (
-            "Lambda cannot have unevalled args; fexpr not supported");
-
-      stack_push ((struct stackframe){
-          .fname = fname,
-          .env = env,
-          .form = form,
-          .nargs = 0,
-      });
-
-      // gc is orrible here, but here all roots are protected
-      // TODO find an elegand solution to this horror
-      gc_maybe ();
-
-      // TODO ugly return in a switch that should decide arity!
-      Lisp_Object result = call_unevalled_subr (unbox_subr (fun), funargs);
-      stack_pop ();
-      return result;
-    }
-
   // this will traverse the list; is this correct??
   int nargs = unbox_int (f_length (funargs));
 
@@ -272,12 +254,6 @@ call_function (Lisp_Object env, Lisp_Object form)
   stack_pop ();
 
   return result;
-}
-
-Lisp_Object
-call_unevalled_subr (Lisp_Subr *usubr, Lisp_Object form)
-{
-  return usubr->function.f888 (form);
 }
 
 Lisp_Object
@@ -356,45 +332,7 @@ call_lambda (Lisp_Lambda *ulambda, int nargs, Lisp_Object *argvals)
   stack_current_set_env (env);
 
   // recursively eval the lambda body
-  return progn (env, ulambda->form);
-}
-
-Lisp_Object
-progn (Lisp_Object env, Lisp_Object form)
-{
-  // TODO it seems that in every function i have used a different way to
-  // traverse the list... awful, pls consistency!!!
-  Lisp_Object val = q_nil;
-  Lisp_Object tail = form;
-
-  while (!nil (tail))
-    {
-      val = eval (env, f_car (tail));
-      tail = f_cdr (tail);
-    }
-
-  return val;
-}
-
-Lisp_Object
-define (Lisp_Object env, Lisp_Object form)
-{
-  Lisp_Object var = f_car (form);
-  check_type (var, LISP_SYMB);
-
-  Lisp_Object value = eval (env, f_car (f_cdr (form)));
-
-  if (eq (env, l_globalenv))
-    {
-      // top level: define in global
-      unbox_symbol (var)->value = value;
-    }
-  else
-    {
-      env_define (env, var, value);
-    }
-
-  return value;
+  return eval_progn (env, ulambda->form);
 }
 
 static inline Lisp_Object
@@ -532,28 +470,7 @@ run_cleanups (struct stackframe *sf)
 
   Lisp_Object cleanups = sf->cleanups;
   sf->cleanups = q_nil;
-  progn (sf->env, cleanups);
-}
-
-Lisp_Object
-unwind_protect (Lisp_Object env, Lisp_Object form)
-{
-  Lisp_Object body = f_car (form);
-  Lisp_Object cleanups = f_cdr (form);
-
-  struct stackframe *sf = stack_current_ref ();
-  sf->cleanups = cleanups;
-
-  Lisp_Object res = eval (env, body);
-
-  // local exit: no error
-
-  // protect res from gc during cleanups
-  sf->keepalive = res;
-
-  run_cleanups (sf);
-
-  return res;
+  eval_progn (sf->env, cleanups);
 }
 
 // maybe this is also useful somewhere else?
@@ -680,8 +597,216 @@ safe_eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out)
   return condition_case_2 (eval_toplevel, env, form, out);
 }
 
-Lisp_Object
-condition_case (Lisp_Object env, Lisp_Object form)
+static inline Lisp_Object
+eval_special_form (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object head = f_car (form);
+  Lisp_Object args = f_cdr (form);
+
+  // a frame for each special form, as for function calls: it keeps env
+  // and form alive, shows in backtraces and holds unwind-protect cleanups
+  stack_push ((struct stackframe){
+      .fname = symbol_name (head),
+      .env = env,
+      .form = form,
+      .nargs = 0,
+  });
+
+  // gc is orrible here, but here all roots are protected
+  // TODO find an elegand solution to this horror
+  gc_maybe ();
+
+  Lisp_Object res;
+  switch ((enum special_form) unbox_symbol (head)->special)
+    {
+    case SF_QUOTE:
+      res = eval_quote (env, args);
+      break;
+    case SF_IF:
+      res = eval_if (env, args);
+      break;
+    case SF_PROGN:
+      res = eval_progn (env, args);
+      break;
+    case SF_LAMBDA:
+      res = eval_lambda (env, args);
+      break;
+    case SF_DEFINE:
+      res = eval_define (env, args);
+      break;
+    case SF_SETQ:
+      res = eval_setq (env, args);
+      break;
+    case SF_UNWIND_PROTECT:
+      res = eval_unwind_protect (env, args);
+      break;
+    case SF_CONDITION_CASE:
+      res = eval_condition_case (env, args);
+      break;
+    case SF_NONE:
+      // not reached: eval dispatches here only special forms
+      internal_error ("Not a special form: %s", symbol_name (head));
+    }
+
+  stack_pop ();
+  return res;
+}
+
+static inline Lisp_Object
+eval_quote (UNUSED Lisp_Object env, Lisp_Object form)
+{
+  return f_car (form);
+}
+
+static inline Lisp_Object
+eval_if (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object cond = f_car (form);
+  Lisp_Object body = f_cdr (form);
+
+  if (!nil (eval (env, cond)))
+    return eval (env, f_car (body));
+  else
+    return eval_progn (env, f_cdr (body));
+}
+
+static inline Lisp_Object
+eval_progn (Lisp_Object env, Lisp_Object form)
+{
+  // TODO it seems that in every function i have used a different way to
+  // traverse the list... awful, pls consistency!!!
+  Lisp_Object val = q_nil;
+  Lisp_Object tail = form;
+
+  while (!nil (tail))
+    {
+      val = eval (env, f_car (tail));
+      tail = f_cdr (tail);
+    }
+
+  return val;
+}
+
+static inline Lisp_Object
+eval_lambda (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object args = f_car (form);
+  Lisp_Object body = f_cdr (form);
+
+  size_t argsize;
+  int minargs = 0;
+  int maxargs;
+  Lisp_Object tail = args;
+  while (consp (tail))
+    {
+      minargs++;
+      tail = f_cdr (tail);
+    }
+
+  if (nil (tail))
+    {
+      // no &rest arguments
+      argsize = maxargs = minargs;
+    }
+  else if (symbolp (tail))
+    {
+      // &rest arguments represented by symbol
+      maxargs = MANY;
+      argsize = minargs + 1;
+    }
+  else
+    type_error (tail, LISP_SYMB);
+
+  Lisp_Object *argv = alloca (argsize * sizeof (Lisp_Object));
+
+  Lisp_Object argtail = args;
+  for (int i = 0; i < minargs; i++)
+    {
+      Lisp_Object argsym = f_car (argtail);
+      check_type (argsym, LISP_SYMB);
+
+      // dirty trick to optimize lookups of purely global symbols
+      unbox_symbol (argsym)->localbound = 1;
+
+      argv[i] = argsym;
+      argtail = f_cdr (argtail);
+    }
+  if (maxargs == MANY)
+    {
+      // fill last slot with rest argument
+      unbox_symbol (tail)->localbound = 1;
+      argv[minargs] = tail;
+    }
+
+  // TODO &optional and &re st
+  return make_lambda (minargs, maxargs, argsize, env, argv, body);
+}
+
+static inline Lisp_Object
+eval_define (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object var = f_car (form);
+  check_type (var, LISP_SYMB);
+
+  Lisp_Object value = eval (env, f_car (f_cdr (form)));
+
+  if (eq (env, l_globalenv))
+    {
+      // top level: define in global
+      unbox_symbol (var)->value = value;
+    }
+  else
+    {
+      env_define (env, var, value);
+    }
+
+  return value;
+}
+
+static inline Lisp_Object
+eval_setq (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object symbol = f_car (form);
+  check_type (symbol, LISP_SYMB);
+
+  Lisp_Object value = eval (env, f_cadr (form));
+  Lisp_Object binding = env_lookup_cell (env, symbol);
+
+  if (!nil (binding))
+    // local
+    f_setcdr (binding, value);
+  else if (!unbound (unbox_symbol (symbol)->value))
+    // global
+    unbox_symbol (symbol)->value = value;
+  else
+    unbound_error (symbol);
+
+  return value;
+}
+
+static inline Lisp_Object
+eval_unwind_protect (Lisp_Object env, Lisp_Object form)
+{
+  Lisp_Object body = f_car (form);
+  Lisp_Object cleanups = f_cdr (form);
+
+  struct stackframe *sf = stack_current_ref ();
+  sf->cleanups = cleanups;
+
+  Lisp_Object res = eval (env, body);
+
+  // local exit: no error
+
+  // protect res from gc during cleanups
+  sf->keepalive = res;
+
+  run_cleanups (sf);
+
+  return res;
+}
+
+static inline Lisp_Object
+eval_condition_case (Lisp_Object env, Lisp_Object form)
 {
   Lisp_Object errtobind = f_car (form);
   check_type (errtobind, LISP_SYMB);
@@ -712,7 +837,7 @@ condition_case (Lisp_Object env, Lisp_Object form)
           env_define (errenv, errtobind, err);
 
           Lisp_Object condbody = f_cdr (cond);
-          return progn (errenv, condbody);
+          return eval_progn (errenv, condbody);
         }
 
       conds = f_cdr (conds);

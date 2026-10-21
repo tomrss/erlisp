@@ -325,27 +325,6 @@ f_nil_p (Lisp_Object o)
 }
 
 Lisp_Object
-f_setq (Lisp_Object form)
-{
-  Lisp_Object symbol = f_car (form);
-  check_type (symbol, LISP_SYMB);
-
-  Lisp_Object value = eval (env_current (), f_cadr (form));
-  Lisp_Object binding = env_lookup_cell (env_current (), symbol);
-
-  if (!nil (binding))
-    // local
-    f_setcdr (binding, value);
-  else if (!unbound (unbox_symbol (symbol)->value))
-    // global
-    unbox_symbol (symbol)->value = value;
-  else
-    unbound_error (symbol);
-
-  return value;
-}
-
-Lisp_Object
 f_string_equal_p (Lisp_Object x, Lisp_Object y)
 {
   check_type (x, LISP_STRG);
@@ -716,97 +695,12 @@ f_leq (Lisp_Object x, Lisp_Object y)
 }
 
 Lisp_Object
-f_progn (Lisp_Object form)
-{
-  return progn (env_current (), form);
-}
-
-Lisp_Object
-f_quote (Lisp_Object form)
-{
-  return f_car (form);
-}
-
-Lisp_Object
-f_define (Lisp_Object form)
-{
-  return define (env_current (), form);
-}
-
-Lisp_Object
 f_defined_p (Lisp_Object symbol)
 {
   check_type (symbol, LISP_SYMB);
   if (!unbound (env_lookup (env_current (), symbol)))
     return q_t;
   return BOOL (!unbound (unbox_symbol (symbol)->value));
-}
-
-Lisp_Object
-f_if (Lisp_Object form)
-{
-  Lisp_Object cond = f_car (form);
-  Lisp_Object body = f_cdr (form);
-
-  if (!nil (eval (env_current (), cond)))
-    return eval (env_current (), f_car (body));
-  else
-    return f_progn (f_cdr (body));
-}
-
-Lisp_Object
-f_lambda (Lisp_Object form)
-{
-  Lisp_Object args = f_car (form);
-  Lisp_Object body = f_cdr (form);
-
-  size_t argsize;
-  int minargs = 0;
-  int maxargs;
-  Lisp_Object tail = args;
-  while (consp (tail))
-    {
-      minargs++;
-      tail = f_cdr (tail);
-    }
-
-  if (nil (tail))
-    {
-      // no &rest arguments
-      argsize = maxargs = minargs;
-    }
-  else if (symbolp (tail))
-    {
-      // &rest arguments represented by symbol
-      maxargs = MANY;
-      argsize = minargs + 1;
-    }
-  else
-    type_error (tail, LISP_SYMB);
-
-  Lisp_Object *argv = alloca (argsize * sizeof (Lisp_Object));
-
-  Lisp_Object argtail = args;
-  for (int i = 0; i < minargs; i++)
-    {
-      Lisp_Object argsym = f_car (argtail);
-      check_type (argsym, LISP_SYMB);
-
-      // dirty trick to optimize lookups of purely global symbols
-      unbox_symbol (argsym)->localbound = 1;
-
-      argv[i] = argsym;
-      argtail = f_cdr (argtail);
-    }
-  if (maxargs == MANY)
-    {
-      // fill last slot with rest argument
-      unbox_symbol (tail)->localbound = 1;
-      argv[minargs] = tail;
-    }
-
-  // TODO &optional and &re st
-  return make_lambda (minargs, maxargs, argsize, env_current (), argv, body);
 }
 
 Lisp_Object
@@ -1333,16 +1227,12 @@ f_flush_output_port (Lisp_Object port)
   return q_nil;
 }
 
-Lisp_Object
-f_unwind_protect (Lisp_Object form)
+static Lisp_Object
+special_form (const char *name, enum special_form sf)
 {
-  return unwind_protect (env_current (), form);
-}
-
-Lisp_Object
-f_condition_case (Lisp_Object form)
-{
-  return condition_case (env_current (), form);
+  Lisp_Object symbol = make_str_symbol (name);
+  unbox_symbol (symbol)->special = sf;
+  return symbol;
 }
 
 void
@@ -1352,6 +1242,9 @@ init_builtins ()
   q_t = make_nstr_symbol ("t", 1);
   q_unbound = make_nstr_symbol ("unbound", 7);
   q_eof = make_nstr_symbol ("eof", 3);
+  q_quote = special_form ("quote", SF_QUOTE);
+  q_lambda = special_form ("lambda", SF_LAMBDA);
+  q_define = special_form ("define", SF_DEFINE);
   q_quasiquote = make_str_symbol ("quasiquote");
   q_unquote = make_str_symbol ("unquote");
   q_unquote_splicing = make_str_symbol ("unquote-splicing");
@@ -1389,6 +1282,14 @@ obarray_register_builtins (Lisp_Object o)
 {
   obarray_put (o, q_nil);
   obarray_put (o, q_t);
+  obarray_put (o, q_quote);
+  obarray_put (o, q_lambda);
+  obarray_put (o, q_define);
+  obarray_put (o, special_form ("if", SF_IF));
+  obarray_put (o, special_form ("progn", SF_PROGN));
+  obarray_put (o, special_form ("set!", SF_SETQ));
+  obarray_put (o, special_form ("unwind-protect", SF_UNWIND_PROTECT));
+  obarray_put (o, special_form ("condition-case", SF_CONDITION_CASE));
   obarray_put (o, q_quasiquote);
   obarray_put (o, q_unquote);
   obarray_put (o, q_unquote_splicing);
@@ -1430,7 +1331,6 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("vector?", 1, 1, f_vector_p));
   obarray_put (o, DEFSUBR ("char?", 1, 1, f_char_p));
   obarray_put (o, DEFSUBR ("nil?", 1, 1, f_nil_p));
-  obarray_put (o, DEFSUBR ("set!", 2, UNEVALLED, f_setq));
   obarray_put (o, DEFSUBR ("eval", 1, 1, f_eval));
   obarray_put (o, DEFSUBR ("apply", 2, 2, f_apply));
   obarray_put (o, DEFSUBR ("macroexpand-1", 1, 1, f_macroexpand_1));
@@ -1461,11 +1361,6 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR (">=", 2, 2, f_geq));
   obarray_put (o, DEFSUBR ("<", 2, 2, f_le));
   obarray_put (o, DEFSUBR ("<=", 2, 2, f_leq));
-  obarray_put (o, DEFSUBR ("progn", 0, UNEVALLED, f_progn));
-  q_quote = obarray_put (o, DEFSUBR ("quote", 0, UNEVALLED, f_quote));
-  obarray_put (o, DEFSUBR ("if", 2, UNEVALLED, f_if));
-  q_lambda = obarray_put (o, DEFSUBR ("lambda", 2, UNEVALLED, f_lambda));
-  q_define = obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
   obarray_put (o, DEFSUBR ("defined?", 1, 1, f_defined_p));
   obarray_put (o, DEFSUBR ("format", 2, MANY, f_format));
   obarray_put (o, DEFSUBR ("read", 1, 1, f_read));
@@ -1502,8 +1397,6 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("write", 1, 2, f_write));
   obarray_put (o, DEFSUBR ("display", 1, 2, f_display));
   obarray_put (o, DEFSUBR ("flush-output-port", 0, 1, f_flush_output_port));
-  obarray_put (o, DEFSUBR ("unwind-protect", 1, UNEVALLED, f_unwind_protect));
-  obarray_put (o, DEFSUBR ("condition-case", 1, UNEVALLED, f_condition_case));
 }
 
 // helpers impl
