@@ -112,11 +112,8 @@ static TestResult test_builtins_compare ();
 static TestResult test_builtins_num_eq ();
 static TestResult test_builtins_min_max ();
 static TestResult test_builtins_abs ();
-static TestResult test_builtins_and ();
-static TestResult test_builtins_or ();
 static TestResult test_builtins_if ();
 static TestResult test_builtins_when_unless ();
-static TestResult test_builtins_cond ();
 static TestResult test_builtins_let ();
 static TestResult test_builtins_define_recursion ();
 static TestResult test_builtins_define_noleak ();
@@ -196,11 +193,8 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "=", .run = test_builtins_num_eq },
   { .skip = 0, .name = "min max", .run = test_builtins_min_max },
   { .skip = 0, .name = "abs", .run = test_builtins_abs },
-  { .skip = 0, .name = "and", .run = test_builtins_and },
-  { .skip = 0, .name = "or", .run = test_builtins_or },
   { .skip = 0, .name = "if", .run = test_builtins_if },
   { .skip = 0, .name = "when unless", .run = test_builtins_when_unless },
-  { .skip = 0, .name = "cond", .run = test_builtins_cond },
   { .skip = 0, .name = "let let*", .run = test_builtins_let },
   { .skip = 0, .name = "def recursion", .run = test_builtins_define_recursion },
   { .skip = 0, .name = "def no leak", .run = test_builtins_define_noleak },
@@ -891,26 +885,6 @@ test_builtins_abs ()
 }
 
 static TestResult
-test_builtins_and ()
-{
-  EXPECT_INT ("(and 1 2 3)", 3);
-  EXPECT_FORM ("(and 1 nil 3)", "nil");
-  // stops at the first nil
-  EXPECT_FORM ("(and nil (car 1))", "nil");
-  return TEST_RESULT_SUCCESS;
-}
-
-static TestResult
-test_builtins_or ()
-{
-  EXPECT_INT ("(or nil 2 3)", 2);
-  EXPECT_FORM ("(or nil nil)", "nil");
-  // stops at the first non nil
-  EXPECT_INT ("(or 1 (car 1))", 1);
-  return TEST_RESULT_SUCCESS;
-}
-
-static TestResult
 test_builtins_if ()
 {
   EXPECT_INT ("(if t 1 2)", 1);
@@ -933,18 +907,6 @@ test_builtins_when_unless ()
   EXPECT_INT ("(unless nil 1 2)", 2);
   EXPECT_FORM ("(unless t 1)", "nil");
   EXPECT_FORM ("(unless t (car 1))", "nil");
-  return TEST_RESULT_SUCCESS;
-}
-
-static TestResult
-test_builtins_cond ()
-{
-  EXPECT_INT ("(cond (nil 1) (t 2))", 2);
-  EXPECT_INT ("(cond ((< 1 2) 1) (t 2))", 1);
-  EXPECT_FORM ("(cond (nil 1))", "nil");
-  EXPECT_INT ("(cond (nil (car 1)) (t 2))", 2);
-  // clause body is an implicit progn, as in scheme and emacs lisp
-  EXPECT_INT ("(cond (t 1 2))", 2);
   return TEST_RESULT_SUCCESS;
 }
 

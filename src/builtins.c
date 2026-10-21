@@ -743,36 +743,6 @@ f_defined_p (Lisp_Object symbol)
 }
 
 Lisp_Object
-f_and (Lisp_Object form)
-{
-  Lisp_Object tail = form;
-  Lisp_Object tem;
-  while (!nil (tail))
-    {
-      tem = eval (env_current (), f_car (tail));
-      if (nil (tem))
-        return q_nil;
-      tail = f_cdr (tail);
-    }
-  return tem;
-}
-
-Lisp_Object
-f_or (Lisp_Object form)
-{
-  Lisp_Object tail = form;
-  Lisp_Object tem;
-  while (!nil (tail))
-    {
-      tem = eval (env_current (), f_car (tail));
-      if (!nil (tem))
-        return tem;
-      tail = f_cdr (tail);
-    }
-  return q_nil;
-}
-
-Lisp_Object
 f_if (Lisp_Object form)
 {
   Lisp_Object cond = f_car (form);
@@ -782,34 +752,6 @@ f_if (Lisp_Object form)
     return eval (env_current (), f_car (body));
   else
     return f_progn (f_cdr (body));
-}
-
-Lisp_Object
-f_cond (Lisp_Object form)
-{
-  Lisp_Object tail = form;
-  Lisp_Object tem;
-  Lisp_Object result = q_nil;
-  while (!nil (tail))
-    {
-      tem = f_car (tail);
-      if (!nil (eval (env_current (), f_car (tem))))
-        {
-          Lisp_Object bodyform = f_cdr (tem);
-          Lisp_Object bodyformtail = bodyform;
-          while (!nil (bodyformtail))
-            {
-              Lisp_Object evalled
-                  = eval (env_current (), f_car (bodyformtail));
-              result = evalled;
-              bodyformtail = f_cdr (bodyformtail);
-            }
-
-          return result;
-        }
-      tail = f_cdr (tail);
-    }
-  return q_nil;
 }
 
 Lisp_Object
@@ -1521,10 +1463,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("<=", 2, 2, f_leq));
   obarray_put (o, DEFSUBR ("progn", 0, UNEVALLED, f_progn));
   q_quote = obarray_put (o, DEFSUBR ("quote", 0, UNEVALLED, f_quote));
-  obarray_put (o, DEFSUBR ("and", 1, UNEVALLED, f_and));
-  obarray_put (o, DEFSUBR ("or", 1, UNEVALLED, f_or));
   obarray_put (o, DEFSUBR ("if", 2, UNEVALLED, f_if));
-  obarray_put (o, DEFSUBR ("cond", 1, UNEVALLED, f_cond));
   q_lambda = obarray_put (o, DEFSUBR ("lambda", 2, UNEVALLED, f_lambda));
   q_define = obarray_put (o, DEFSUBR ("define", 2, UNEVALLED, f_define));
   obarray_put (o, DEFSUBR ("defined?", 1, 1, f_defined_p));

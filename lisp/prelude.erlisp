@@ -1,15 +1,14 @@
 ;;; quasiquotation
 
+;; note: nested ifs because we still have no cond
 (define (qq-expand x)
-  (cond
-   ((nil? (cons? x))
-    (cons 'quote (cons x nil)))
-   ((eq? (car x) 'unquote)
-    (car (cdr x)))
-   ((and (cons? (car x)) (eq? (car (car x)) 'unquote-splicing))
-    (cons 'append (cons (car (cdr (car x))) (cons (qq-expand (cdr x)) nil))))
-   (t
-    (cons 'cons (cons (qq-expand (car x)) (cons (qq-expand (cdr x)) nil))))))
+  (if (nil? (cons? x))
+      (cons 'quote (cons x nil))
+      (if (eq? (car x) 'unquote)
+          (car (cdr x))
+          (if (if (cons? (car x)) (eq? (car (car x)) 'unquote-splicing))
+              (cons 'append (cons (car (cdr (car x))) (cons (qq-expand (cdr x)) nil)))
+              (cons 'cons (cons (qq-expand (car x)) (cons (qq-expand (cdr x)) nil)))))))
 
 (defmacro (quasiquote x)
   (qq-expand x))
@@ -21,6 +20,31 @@
   (signal 'syntax-error '("unquote-splicing outside quasiquote")))
 
 ;;; primitives
+
+(defmacro (and . rest)
+  (if rest
+      (if (cdr rest)
+          `(if ,(car rest) (and ,@(cdr rest)))
+          (car rest))
+      t))
+
+(defmacro (or . rest)
+  (if rest
+      (if (cdr rest)
+          (if (cons? (car rest))
+              ((lambda (tmp)
+                 `((lambda (,tmp) (if ,tmp ,tmp (or ,@(cdr rest)))) ,(car rest)))
+               (symbol "tmp"))
+              `(if ,(car rest) ,(car rest) (or ,@(cdr rest))))
+          (car rest))
+      nil))
+
+(defmacro (cond . rest)
+  (if rest
+      `(if ,(caar rest)
+           (progn ,@(cdar rest))
+           (cond ,@(cdr rest)))
+      nil))
 
 (define (caar c) (car (car c)))
 (define (cdar c) (cdr (car c)))
