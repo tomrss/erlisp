@@ -58,12 +58,6 @@ Lisp_Object defsubr (const char *name, int minargs, int maxargs,
 void init_alloc ();
 struct memstats gc ();
 int gc_maybe ();
-// while inhibited (counter > 0) gc_maybe never collects. it's a counter
-// because inhibitions can nest
-void gc_inhibit ();
-void gc_allow ();
-int gc_inhibit_level ();
-void gc_inhibit_set_level (int level);
 struct memstats memstats ();
 void print_memstats (struct memstats);
 void memdump ();

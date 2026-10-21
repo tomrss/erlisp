@@ -172,7 +172,7 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "equal?", .run = test_builtins_equal },
   { .skip = 0, .name = "eqv?", .run = test_builtins_eqv },
   { .skip = 0, .name = "symbol", .run = test_builtins_symbol },
-  { .skip = 0, .name = "symbol_value", .run = test_builtins_symbol_value },
+  { .skip = 0, .name = "symbol-value", .run = test_builtins_symbol_value },
   { .skip = 0, .name = "vector", .run = test_builtins_vector },
   { .skip = 0, .name = "eval", .run = test_builtins_eval },
   { .skip = 0, .name = "string=?", .run = test_builtins_string_equal },
@@ -263,7 +263,7 @@ static int
 eval_src (const char *src, Lisp_Object *out)
 {
   // like load and the repl: macroexpand, then eval
-  return condition_case_2 (eval_toplevel, l_globalenv, parse_src (src), out);
+  return condition_case_1 (eval_toplevel, parse_src (src), out);
 }
 
 static int
@@ -456,8 +456,8 @@ test_builtins_symbol_value ()
 {
   Lisp_Object symb = f_intern (make_string ("symbol-value-test"));
   unbox_symbol (symb)->value = box_int (5);
-  EXPECT_INT ("(symbol_value 'symbol-value-test)", 5);
-  EXPECT_ERROR ("(symbol_value 1)", q_error_type);
+  EXPECT_INT ("(symbol-value 'symbol-value-test)", 5);
+  EXPECT_ERROR ("(symbol-value 1)", q_error_type);
   return TEST_RESULT_SUCCESS;
 }
 
@@ -637,8 +637,8 @@ test_builtins_print_list ()
   EXPECT_FORM ("(format nil \"~s\" '(1 (2 (3))))", "\"(1 (2 (3)))\"");
 
   // nil as element is printed, only the final one is not
-  EXPECT_FORM ("(format nil \"~s\" '(nil))", "\"(NIL)\"");
-  EXPECT_FORM ("(format nil \"~s\" '(1 nil 2))", "\"(1 NIL 2)\"");
+  EXPECT_FORM ("(format nil \"~s\" '(nil))", "\"(nil)\"");
+  EXPECT_FORM ("(format nil \"~s\" '(1 nil 2))", "\"(1 nil 2)\"");
 
   // improper lists: the dot only before the last cdr, in the same parens
   EXPECT_FORM ("(format nil \"~s\" (cons 1 2))", "\"(1 . 2)\"");
@@ -1383,12 +1383,17 @@ test_builtins_unwind_protect_error ()
                 boom);
   EXPECT_FORM ("up-log", "(1 2)");
 
-  // the cleanups do not change the backtrace, innermost frame first
+  // the cleanups do not change the backtrace, innermost frame first. only
+  // the three innermost frames: below them are the frames of the lisp eval
+  // called by the toplevel
   Lisp_Object err;
   TEST_ASSERT (!eval_src ("(unwind-protect (up-throw 1) 2)", &err),
                "expected up-boom, got no error");
+  Lisp_Object bt = f_error_backtrace (err);
+  Lisp_Object innermost = f_cons (
+      f_car (bt), f_cons (f_cadr (bt), f_cons (f_car (f_cddr (bt)), q_nil)));
   TEST_ASSERT (
-      same_form (f_error_backtrace (err),
+      same_form (innermost,
                  parse_src ("(\"signal\" \"up-throw\" \"unwind-protect\")")),
       "expected backtrace (\"signal\" \"up-throw\" \"unwind-protect\")");
   return TEST_RESULT_SUCCESS;
@@ -1715,12 +1720,6 @@ test_builtins_defmacro ()
 
   // quoted data is not expanded
   EXPECT_FORM ("'(mac-if t 1 2)", "(mac-if t 1 2)");
-
-  // macroexpand-1 expands one step, only if the head is a macro
-  EXPECT_FORM ("(macroexpand-1 '(mac-if t 1 2))", "(if t 1 2)");
-  EXPECT_FORM ("(macroexpand-1 '(mac-not x))", "(mac-if x nil t)");
-  EXPECT_FORM ("(macroexpand-1 '(car x))", "(car x)");
-  EXPECT_INT ("(macroexpand-1 1)", 1);
   return TEST_RESULT_SUCCESS;
 }
 
@@ -1854,8 +1853,6 @@ test_builtins_defmacro_rest ()
                        "  `(if ,c (progn ,@body) nil))");
   EXPECT_INT ("(mac-rest-when t 1 2 3)", 3);
   EXPECT_FORM ("(mac-rest-when nil (car 1))", "nil");
-  EXPECT_FORM ("(macroexpand-1 '(mac-rest-when c a b))",
-               "(if c (progn a b) nil)");
 
   EXPECT_NO_ERROR_SRC ("(defmacro (mac-rest-list . xs) `(quote ,xs))");
   EXPECT_FORM ("(mac-rest-list a b)", "(a b)");

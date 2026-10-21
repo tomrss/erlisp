@@ -28,8 +28,7 @@ Lisp_Object q_unquote;
 Lisp_Object q_unquote_splicing;
 Lisp_Object q_lambda;
 Lisp_Object q_define;
-Lisp_Object q_defmacro;
-Lisp_Object q_macro;
+Lisp_Object q_eval;
 Lisp_Object q_cons;
 Lisp_Object q_error;
 Lisp_Object q_error_arith;
@@ -112,21 +111,15 @@ f_symbol_value (Lisp_Object symbol)
 }
 
 Lisp_Object
-f_eval (Lisp_Object form)
+f_eval_noexpand (Lisp_Object form)
 {
-  return eval_toplevel (l_globalenv, form);
+  return eval (l_globalenv, form);
 }
 
 Lisp_Object
 f_apply (Lisp_Object fun, Lisp_Object args)
 {
   return apply (env_current (), fun, args);
-}
-
-Lisp_Object
-f_macroexpand_1 (Lisp_Object form)
-{
-  return macroexpand_1 (form);
 }
 
 Lisp_Object
@@ -1245,11 +1238,11 @@ init_builtins ()
   q_quote = special_form ("quote", SF_QUOTE);
   q_lambda = special_form ("lambda", SF_LAMBDA);
   q_define = special_form ("define", SF_DEFINE);
+  // bound by the prelude to the eval that expands macros
+  q_eval = make_str_symbol ("eval");
   q_quasiquote = make_str_symbol ("quasiquote");
   q_unquote = make_str_symbol ("unquote");
   q_unquote_splicing = make_str_symbol ("unquote-splicing");
-  q_defmacro = make_str_symbol ("defmacro");
-  q_macro = make_str_symbol ("macro");
   q_error = make_nstr_symbol ("error", 5);
   q_error_arith = make_str_symbol ("arith-error");
   q_error_file = make_str_symbol ("file-error");
@@ -1285,6 +1278,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, q_quote);
   obarray_put (o, q_lambda);
   obarray_put (o, q_define);
+  obarray_put (o, q_eval);
   obarray_put (o, special_form ("if", SF_IF));
   obarray_put (o, special_form ("progn", SF_PROGN));
   obarray_put (o, special_form ("set!", SF_SETQ));
@@ -1293,8 +1287,6 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, q_quasiquote);
   obarray_put (o, q_unquote);
   obarray_put (o, q_unquote_splicing);
-  obarray_put (o, q_defmacro);
-  obarray_put (o, q_macro);
   obarray_put (o, q_error_arith);
   obarray_put (o, q_error_file);
   obarray_put (o, q_error_funcargs);
@@ -1315,7 +1307,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("setcdr", 2, 2, f_setcdr));
   obarray_put (o, DEFSUBR ("vector", 1, 1, f_vector));
   obarray_put (o, DEFSUBR ("symbol", 1, 1, f_symbol));
-  obarray_put (o, DEFSUBR ("symbol_value", 1, 1, f_symbol_value));
+  obarray_put (o, DEFSUBR ("symbol-value", 1, 1, f_symbol_value));
   obarray_put (o, DEFSUBR ("car", 1, 1, f_car));
   obarray_put (o, DEFSUBR ("cdr", 1, 1, f_cdr));
   obarray_put (o, DEFSUBR ("cadr", 1, 1, f_cadr));
@@ -1331,9 +1323,8 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("vector?", 1, 1, f_vector_p));
   obarray_put (o, DEFSUBR ("char?", 1, 1, f_char_p));
   obarray_put (o, DEFSUBR ("nil?", 1, 1, f_nil_p));
-  obarray_put (o, DEFSUBR ("eval", 1, 1, f_eval));
+  obarray_put (o, DEFSUBR ("eval-noexpand", 1, 1, f_eval_noexpand));
   obarray_put (o, DEFSUBR ("apply", 2, 2, f_apply));
-  obarray_put (o, DEFSUBR ("macroexpand-1", 1, 1, f_macroexpand_1));
   obarray_put (o, DEFSUBR ("assoc", 2, 2, f_assoc));
   obarray_put (o, DEFSUBR ("assq", 2, 2, f_assq));
   obarray_put (o, DEFSUBR ("rassoc", 2, 2, f_rassoc));

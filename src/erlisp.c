@@ -13,7 +13,7 @@
 static Lisp_Object
 read_eval (Lisp_Object line)
 {
-  return eval_toplevel (env_current (), f_read (line));
+  return eval_toplevel (f_read (line));
 }
 
 int
@@ -87,7 +87,7 @@ main (int argc, char **argv)
 
   Lisp_Object load = f_intern (make_string ("load"));
   Lisp_Object path = make_string (argv[1]);
-  f_eval (f_cons (load, f_cons (path, q_nil)));
+  eval_toplevel (f_cons (load, f_cons (path, q_nil)));
 
   return 0;
 }

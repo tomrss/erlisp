@@ -135,12 +135,12 @@ fprint_form (Lisp_Port *p, Lisp_Object form, int display)
 {
   if (nil (form))
     {
-      port_write_string ("NIL", p);
+      port_write_string ("nil", p);
       return;
     }
   if (eq (form, q_t))
     {
-      port_write_char ('T', p);
+      port_write_char ('t', p);
       return;
     }
   if (unbound (form))

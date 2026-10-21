@@ -1,3 +1,9 @@
+;;; eval
+
+(define eval
+  (lambda (form)
+    (eval-noexpand (macroexpand-all form))))
+
 ;;; quasiquotation
 
 ;; note: nested ifs because we still have no cond
@@ -41,9 +47,18 @@
 
 (defmacro (cond . rest)
   (if rest
-      `(if ,(caar rest)
-           (progn ,@(cdar rest))
-           (cond ,@(cdr rest)))
+      ((lambda (test body)
+         (if (eq? test t)
+             body
+             (if (cdr rest)
+                 `(if ,test ,body (cond ,@(cdr rest)))
+                 `(if ,test ,body))))
+       (caar rest)
+       ((lambda (forms)
+          (if (and forms (nil? (cdr forms)))
+              (car forms)
+              `(progn ,@forms)))
+        (cdar rest)))
       nil))
 
 (define (caar c) (car (car c)))

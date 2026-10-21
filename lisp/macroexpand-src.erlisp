@@ -1,0 +1,69 @@
+;; this is macroexpand written in meaningful lisp.  it's used to
+;; generate the real macroexpand.erlisp that's get loaded at
+;; startup. why? because this is the code to define macros: we cannot
+;; use anything that is defined in the prelude to run this (no
+;; quasiquote, no let, no list, nothing...). this will make the
+;; program really ugly and honestly difficult for the brain to work
+;; with.
+;;
+;; what we do instead:
+;; - write real code here (using everything in the language
+;; - use tools/expand-macroexpand.erlisp to expand the macro expand!
+;; - yes this means this code will expand its next version by itself!
+;;   it's lisp remember? crazy things happen all the time
+;; - this code is not loaded in C code
+;; - what gets embedded and loaded in C is the generated macroexpand.erlisp
+;; - don't touch that manually!
+
+(define (macro-object head)
+  (if (and (symbol? head) (defined? head))
+      (let ((macro (symbol-value head)))
+        (if (and (cons? macro) (eq? (car macro) 'macro))
+            macro))))
+
+(define (macroexpand-1 form)
+  (if (cons? form)
+      (let ((macrofun (cdr (macro-object (car form)))))
+        (if macrofun
+            (apply macrofun (cdr form))
+            form))
+      form))
+
+(define (expand-list form)
+  (if form
+      (cons (macroexpand-all (car form))
+            (expand-list (cdr form)))
+      nil))
+
+(define (expand-define form)
+  (let ((var (car (cdr form))))
+    (if (cons? var)
+        `(define ,(car var)
+           (lambda ,(cdr var) . ,(expand-list (cdr (cdr form)))))
+        (expand-list form))))
+
+(define (expand-defmacro form)
+  (let ((var (car (cdr form))))
+    `(define ,(car var)
+       (cons 'macro (lambda ,(cdr var) . ,(expand-list (cdr (cdr form))))))))
+
+(define (expand-lambda form)
+  `(lambda ,(cadr form) . ,(expand-list (cddr form))))
+
+(define (macroexpand-all form)
+  (if (cons? form)
+      (let ((head (car form)))
+        (cond
+         ((eq? 'quote head)
+          form)
+         ((eq? 'define head)
+          (expand-define form))
+         ((eq? 'defmacro head)
+          (expand-defmacro form))
+         ((eq? 'lambda head)
+          (expand-lambda form))
+         ((macro-object head)
+          (macroexpand-all (macroexpand-1 form)))
+         (t
+          (expand-list form))))
+      form))

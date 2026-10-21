@@ -32,7 +32,6 @@ static TestResult test_eval_setq_unbound ();
 static TestResult test_eval_lexical_inner_define ();
 static TestResult test_eval_lexical_gc_caller_locals ();
 static TestResult test_eval_lexical_head_eval ();
-static TestResult test_expand_define ();
 
 // name of the error symbol, for failure messages
 static const char *errname (Lisp_Object err);
@@ -69,7 +68,6 @@ static TestCase test_eval_cases[] = {
     .name = "lex gc locals",
     .run = test_eval_lexical_gc_caller_locals },
   { .skip = 0, .name = "lex head eval", .run = test_eval_lexical_head_eval },
-  { .skip = 0, .name = "expand define", .run = test_expand_define },
   {}, // terminator
 };
 
@@ -438,7 +436,7 @@ test_eval_load ()
   Lisp_Object form
       = mklist (2, sym ("load"), make_string ("test/assets/src-load.tl"));
   Lisp_Object res;
-  TEST_ASSERT (condition_case_2 (eval_toplevel, l_globalenv, form, &res),
+  TEST_ASSERT (condition_case_1 (eval_toplevel, form, &res),
                "unexpected %s", errname (res));
   TEST_ASSERT (eq (res, q_t), "expected load to return t");
 
@@ -682,8 +680,9 @@ test_eval_lexical_counter ()
                         mklist (3, sym ("*"), box_int (10), mklist (1, c1)),
                         mklist (1, c2)));
 
+  // let is a macro: the form must go through the expander
   Lisp_Object res;
-  TEST_ASSERT (safe_eval (l_globalenv, form, &res), "unexpected %s",
+  TEST_ASSERT (condition_case_1 (eval_toplevel, form, &res), "unexpected %s",
                errname (res));
   TEST_CHECK_TYPE ("result", res, LISP_INTG);
   TEST_ASSERT (unbox_int (res) == 32, "expected %d, got %ld", 32,
@@ -735,8 +734,9 @@ test_eval_setq_scopes ()
                       mklist (2, shadow, box_int (5))),
               mklist (3, sym ("*"), box_int (10), let), mklist (1, getv)));
 
+  // let is a macro: the form must go through the expander
   Lisp_Object res;
-  TEST_ASSERT (safe_eval (l_globalenv, form, &res), "unexpected %s",
+  TEST_ASSERT (condition_case_1 (eval_toplevel, form, &res), "unexpected %s",
                errname (res));
   TEST_CHECK_TYPE ("result", res, LISP_INTG);
   TEST_ASSERT (unbox_int (res) == 1083, "expected %d, got %ld", 1083,
@@ -779,8 +779,9 @@ test_eval_setq_unbound ()
   Lisp_Object form = mklist (4, sym ("let"),
                              mklist (1, mklist (2, n, box_int (1))), inner, n);
 
+  // let is a macro: the form must go through the expander
   Lisp_Object res;
-  TEST_ASSERT (safe_eval (l_globalenv, form, &res), "unexpected %s",
+  TEST_ASSERT (condition_case_1 (eval_toplevel, form, &res), "unexpected %s",
                errname (res));
   TEST_CHECK_TYPE ("result", res, LISP_INTG);
   TEST_ASSERT (unbox_int (res) == 3, "expected %d, got %ld", 3,
@@ -918,8 +919,9 @@ test_eval_lexical_gc_caller_locals ()
               mklist (3, sym ("lambda"), mklist (1, k), let)),
       mklist (2, caller, box_int (1)));
 
+  // let is a macro: the form must go through the expander
   Lisp_Object res;
-  TEST_ASSERT (safe_eval (l_globalenv, form, &res), "unexpected %s",
+  TEST_ASSERT (condition_case_1 (eval_toplevel, form, &res), "unexpected %s",
                errname (res));
   TEST_CHECK_TYPE ("result", res, LISP_INTG);
   TEST_ASSERT (unbox_int (res) == 2, "expected %d, got %ld", 2,
@@ -970,36 +972,6 @@ test_eval_lexical_head_eval ()
   TEST_CHECK_TYPE ("result", res, LISP_INTG);
   TEST_ASSERT (unbox_int (res) == 21, "expected %d, got %ld", 21,
                unbox_int (res));
-
-  return TEST_RESULT_SUCCESS;
-}
-
-static TestResult
-test_expand_define ()
-{
-  /*
-    The short form of define is rewritten by the expander:
-
-    (define (f a) a)
-      ---> (define f (lambda (a) a))
-   */
-  Lisp_Object f = make_str_symbol ("f");
-  Lisp_Object a = make_str_symbol ("a");
-
-  Lisp_Object form = mklist (3, sym ("define"), mklist (2, f, a), a);
-  Lisp_Object expected
-      = mklist (3, sym ("define"), f,
-                mklist (3, sym ("lambda"), mklist (1, a), a));
-
-  Lisp_Object res = macroexpand_all (form);
-  TEST_ASSERT (eq (f_equal_p (res, expected), q_t),
-               "unexpected expansion of short define");
-
-  // the normal form is left as it is
-  Lisp_Object normal = mklist (3, sym ("define"), f, box_int (1));
-  res = macroexpand_all (normal);
-  TEST_ASSERT (eq (f_equal_p (res, normal), q_t),
-               "unexpected expansion of normal define");
 
   return TEST_RESULT_SUCCESS;
 }

@@ -15,7 +15,7 @@ TEST_SOURCES := $(wildcard $(TEST_DIR)/*.c)
 TEST_OBJECTS := $(patsubst $(TEST_DIR)/test_%.c,$(OBJ_DIR)/test_%.o,$(TEST_SOURCES))
 
 
-.PHONY: all debug clean test test-debug run
+.PHONY: all debug clean test test-debug run expand-macroexpand
 
 all: $(TARGET)
 
@@ -27,7 +27,7 @@ debug: $(TARGET)
 $(TARGET): $(OBJECTS)
 	$(CC) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o $@
 
-$(OBJ_DIR)/prelude.o: lisp/prelude.erlisp
+$(OBJ_DIR)/prelude.o: lisp/prelude.erlisp lisp/macroexpand.erlisp
 
 $(OBJ_DIR)/%.o: $(SRC_DIR)/%.c | $(OBJ_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -50,6 +50,9 @@ $(OBJ_DIR)/test_%.o: $(TEST_DIR)/test_%.c | $(OBJ_DIR)
 
 test_$(TARGET): $(OBJECTS_NOMAIN) $(TEST_OBJECTS) $(TARGET)
 	$(CC) $(LDFLAGS) $(OBJECTS_NOMAIN) $(TEST_OBJECTS) $(LDLIBS) -o $(TEST_DIR)/test_$(TARGET)
+
+expand-macroexpand: $(TARGET)
+	./$(TARGET) tools/expand-macroexpand.erlisp
 
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET) $(TEST_TARGET)

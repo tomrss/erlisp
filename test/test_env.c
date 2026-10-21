@@ -50,11 +50,14 @@ test_env_obarray ()
   TEST_CHECK_TYPE ("cons subr", unbox_symbol (fsymb)->value, LISP_SUBR);
   TEST_ASSERT (unbox_subr (unbox_symbol (fsymb)->value)->header.maxargs == 2,
                "cons maxargs");
-  fsymb = obarray_lookup_name (v_obarray, make_string ("eval"));
-  TEST_CHECK_TYPE ("eval symb", fsymb, LISP_SYMB);
-  TEST_CHECK_TYPE ("eval subr", unbox_symbol (fsymb)->value, LISP_SUBR);
+  // eval is a lisp function defined by the prelude, the subr is
+  // eval-noexpand
+  fsymb = obarray_lookup_name (v_obarray, make_string ("eval-noexpand"));
+  TEST_CHECK_TYPE ("eval-noexpand symb", fsymb, LISP_SYMB);
+  TEST_CHECK_TYPE ("eval-noexpand subr", unbox_symbol (fsymb)->value,
+                   LISP_SUBR);
   TEST_ASSERT (unbox_subr (unbox_symbol (fsymb)->value)->header.maxargs == 1,
-               "eval maxargs");
+               "eval-noexpand maxargs");
   return TEST_RESULT_SUCCESS;
 }
 

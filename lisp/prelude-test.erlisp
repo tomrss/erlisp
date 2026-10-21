@@ -1,5 +1,59 @@
 ;;; tests for the prelude
 
+;;; macroexpand
+
+(defmacro (mx-if c a b)
+  `(if ,c ,a ,b))
+
+(defmacro (mx-not x)
+  `(mx-if ,x nil t))
+
+(defmacro (mx-when c . body)
+  `(if ,c (progn ,@body) nil))
+
+(deftest (macroexpand-define-short)
+  (assert-equal '(define f (lambda (a) a))
+                (macroexpand-all '(define (f a) a))))
+
+(deftest (macroexpand-define-normal)
+  (assert-equal '(define f 1) (macroexpand-all '(define f 1))))
+
+(deftest (macroexpand-define-body)
+  (assert-equal '(define f (lambda (x) (if x 1 2)))
+                (macroexpand-all '(define (f x) (mx-if x 1 2)))))
+
+(deftest (macroexpand-defmacro)
+  (assert-equal '(define m (cons 'macro (lambda (x) x)))
+                (macroexpand-all '(defmacro (m x) x))))
+
+(deftest (macroexpand-lambda-body)
+  (assert-equal '(lambda (x) (if x 1 2))
+                (macroexpand-all '(lambda (x) (mx-if x 1 2)))))
+
+(deftest (macroexpand-quote)
+  (assert-equal ''(mx-if t 1 2) (macroexpand-all ''(mx-if t 1 2))))
+
+(deftest (macroexpand-nested)
+  (assert-equal '(if (if x nil t) 1 2)
+                (macroexpand-all '(mx-if (mx-not x) 1 2))))
+
+(deftest (macroexpand-1-one-step)
+  (assert-equal '(if t 1 2) (macroexpand-1 '(mx-if t 1 2)))
+  (assert-equal '(mx-if x nil t) (macroexpand-1 '(mx-not x))))
+
+(deftest (macroexpand-1-rest)
+  (assert-equal '(if c (progn a b) nil) (macroexpand-1 '(mx-when c a b))))
+
+(deftest (macroexpand-1-not-macro)
+  (assert-equal '(car x) (macroexpand-1 '(car x)))
+  (assert-equal 1 (macroexpand-1 1)))
+
+(deftest (eval-expands)
+  (assert-equal 1 (eval '(mx-if t 1 2))))
+
+(deftest (eval-noexpand-does-not-expand)
+  (assert-error 'invalid-func-error (eval-noexpand '(mx-if t 1 2))))
+
 ;;; quasiquote
 
 (deftest (qq-plain)
