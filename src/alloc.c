@@ -384,7 +384,7 @@ gc_maybe ()
 {
   // TODO defines
   const float growthreshold = 5.;
-  const size_t minheap = PAGE_SIZE * 32;
+  const size_t minheap = 1 * 1024 * 1024;
   const size_t maxheap = 256 * 1024 * 1024;
 
   size_t used = heap->usedsize;

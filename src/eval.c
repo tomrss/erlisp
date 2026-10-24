@@ -11,15 +11,31 @@ static void step_eval (struct lispmachine *lm);
 static void step_apply (struct lispmachine *lm);
 static int step_return (struct lispmachine *lm);
 
+static int try_inline_eval (Lisp_Object env, Lisp_Object form,
+                            Lisp_Object *out);
+
 static Lisp_Object find_binding (Lisp_Object env, Lisp_Object symbol);
 static Lisp_Object call_subr (Lisp_Subr *usubr, int maxargs, int arity,
                               Lisp_Object *argvals);
 static void eval_application (struct lispmachine *lm, Lisp_Object env,
-                              Lisp_Object head, Lisp_Object tail);
+                              Lisp_Object form);
 static void eval_body (struct lispmachine *lm, Lisp_Object env,
                        Lisp_Object tail);
 static void eval_lambda (struct lispmachine *lm, Lisp_Object env,
                          Lisp_Object form);
+
+static void return_if (struct lispmachine *lm, Lisp_Object env,
+                       Lisp_Object cond, Lisp_Object body);
+
+static void return_define (struct lispmachine *lm, Lisp_Object env,
+                           Lisp_Object symbol, Lisp_Object value);
+
+static void return_setq (struct lispmachine *lm, Lisp_Object env,
+                         Lisp_Object symbol, Lisp_Object value);
+
+static void return_args (struct lispmachine *lm, Lisp_Object env,
+                         Lisp_Object value, Lisp_Object argl,
+                         Lisp_Object unev);
 
 struct lispmachine *
 lispmachine_init (Lisp_Object env, Lisp_Object form)
@@ -187,82 +203,84 @@ step_eval (struct lispmachine *lm)
 {
   Lisp_Object env = lm->meval.env;
   Lisp_Object form = lm->meval.exp;
-  switch (type_of (form))
+
+  Lisp_Object inlined;
+
+  if (try_inline_eval (env, form, &inlined))
     {
-    case LISP_INTG:
-    case LISP_CHAR:
-    case LISP_FLOT:
-    case LISP_STRG:
-    case LISP_VECT:
-    case LISP_SUBR:
-    case LISP_LMBD:
-    case LISP_PORT:
-      // self-evaluating
-      goto_return (lm, form);
-      break;
-    case LISP_SYMB:
-      goto_return (lm, find_binding (env, form));
-      break;
-    case LISP_CONS:
-      {
-        Lisp_Object head = f_car (form);
-        Lisp_Object tail = f_cdr (form);
-        if (symbolp (head))
-          {
-            switch ((enum special_form)unbox_symbol (head)->special)
-              {
-              case SF_NONE:
-                eval_application (lm, env, head, tail);
-                break;
-              case SF_QUOTE:
-                goto_return (lm, f_car (tail));
-                break;
-              case SF_IF:
-                // TODO optimize: if cond is atom, do not push frame
-                // (car tail) -> if cond
-                // (cdr tail) -> if body (then + else)
-                stack_push_if (env, f_cdr (tail));
-                goto_eval (lm, env, f_car (tail));
-                break;
-              case SF_PROGN:
-                // TODO optimize: if first is atom, do not push frame
-                eval_body (lm, env, tail);
-                break;
-              case SF_LAMBDA:
-                eval_lambda (lm, env, tail);
-                break;
-              case SF_DEFINE:
-                // TODO optimize: if value is atom, do not push frame
-                // (car tail) -> sym to define
-                // (car (cdr tail)) -> value
-                check_type (f_car (tail), LISP_SYMB);
-                stack_push_define (env, f_car (tail));
-                goto_eval (lm, env, f_car (f_cdr (tail)));
-                break;
-              case SF_SETQ:
-                // TODO optimize: if value is atom, do not push frame
-                // (car tail) -> sym to set
-                // (car (cdr tail)) -> definition
-                check_type (f_car (tail), LISP_SYMB);
-                stack_push_setq (env, f_car (tail));
-                goto_eval (lm, env, f_car (f_cdr (tail)));
-                break;
-              case SF_UNWIND_PROTECT:
-                stack_push_unwindprotect (env, f_cdr (tail));
-                goto_eval (lm, env, f_car (tail));
-                break;
-              case SF_CONDITION_CASE:
-                check_type (f_car (tail), LISP_SYMB);
-                stack_push_conditioncase (env, f_car (tail),
-                                          f_cdr (f_cdr (tail)));
-                goto_eval (lm, env, f_car (f_cdr (tail)));
-                break;
-              }
-          }
-        else
-          eval_application (lm, env, head, tail);
-      }
+      goto_return (lm, inlined);
+      return;
     }
+
+  // if not inline evalled, this is an unquoted cons
+
+  Lisp_Object head = f_car (form);
+  Lisp_Object tail = f_cdr (form);
+  if (symbolp (head))
+    {
+      switch ((enum special_form)unbox_symbol (head)->special)
+        {
+        case SF_NONE:
+          eval_application (lm, env, form);
+          break;
+        case SF_QUOTE:
+          goto_return (lm, f_car (tail));
+          break;
+        case SF_IF:
+          // (car tail) -> if cond
+          // (cdr tail) -> if body (then + else)
+          if (try_inline_eval (env, f_car (tail), &inlined))
+            return_if (lm, env, inlined, f_cdr (tail));
+          else
+            {
+              stack_push_if (env, f_cdr (tail));
+              goto_eval (lm, env, f_car (tail));
+            }
+          break;
+        case SF_PROGN:
+          // TODO optimize: if first is atom, do not push frame
+          eval_body (lm, env, tail);
+          break;
+        case SF_LAMBDA:
+          eval_lambda (lm, env, tail);
+          break;
+        case SF_DEFINE:
+          // (car tail) -> sym to define
+          // (car (cdr tail)) -> value
+          check_type (f_car (tail), LISP_SYMB);
+          if (try_inline_eval (env, f_car (f_cdr (tail)), &inlined))
+            return_define (lm, env, f_car (tail), inlined);
+          else
+            {
+              stack_push_define (env, f_car (tail));
+              goto_eval (lm, env, f_car (f_cdr (tail)));
+            }
+          break;
+        case SF_SETQ:
+          // (car tail) -> sym to set
+          // (car (cdr tail)) -> definition
+          check_type (f_car (tail), LISP_SYMB);
+          if (try_inline_eval (env, f_car (f_cdr (tail)), &inlined))
+            return_setq (lm, env, f_car (tail), inlined);
+          else
+            {
+              stack_push_setq (env, f_car (tail));
+              goto_eval (lm, env, f_car (f_cdr (tail)));
+            }
+          break;
+        case SF_UNWIND_PROTECT:
+          stack_push_unwindprotect (env, f_cdr (tail));
+          goto_eval (lm, env, f_car (tail));
+          break;
+        case SF_CONDITION_CASE:
+          check_type (f_car (tail), LISP_SYMB);
+          stack_push_conditioncase (env, f_car (tail), f_cdr (f_cdr (tail)));
+          goto_eval (lm, env, f_car (f_cdr (tail)));
+          break;
+        }
+    }
+  else
+    eval_application (lm, env, form);
 }
 
 static void
@@ -365,66 +383,16 @@ step_return (struct lispmachine *lm)
       eval_body (lm, env, frame.seq.rest);
       break;
     case F_ARGS:
-      {
-        Lisp_Object arglreversed = f_cons (val, frame.args.argl);
-        Lisp_Object unev = frame.args.unev;
-
-        if (nil (unev))
-          {
-            // every arg is evalled, apply
-
-            // reverse the argl (we appended to head to grow it)
-            // TODO this could be a useful builtin func for reverse list
-            Lisp_Object argl = q_nil;
-            Lisp_Object tail = arglreversed;
-            while (!nil (tail))
-              {
-                argl = f_cons (f_car (tail), argl);
-                tail = f_cdr (tail);
-              }
-            goto_apply (lm, f_car (argl), f_cdr (argl));
-          }
-        else
-          {
-            // still args to eval
-            stack_push_args (env, arglreversed, f_cdr (unev));
-            goto_eval (lm, env, f_car (unev));
-          }
-      }
+      return_args (lm, env, val, frame.args.argl, frame.args.unev);
       break;
     case F_IF:
-      if (nil (val)) // val is if condition
-        eval_body (lm, env, f_cdr (frame.if_.body));
-      else
-        goto_eval (lm, env, f_car (frame.if_.body));
+      return_if (lm, env, val, frame.if_.body);
       break;
     case F_DEFINE:
-      {
-        Lisp_Object symbol = frame.define.symbol;
-        if (eq (env, l_globalenv))
-          // top level: define in global
-          unbox_symbol (symbol)->value = val;
-        else
-          env_define (frame.env, symbol, val);
-
-        goto_return (lm, val);
-      }
+      return_define (lm, env, frame.define.symbol, val);
       break;
     case F_SETQ:
-      {
-        Lisp_Object symbol = frame.setq.symbol;
-        Lisp_Object binding = env_lookup_cell (env, symbol);
-        if (!nil (binding))
-          // local
-          f_setcdr (binding, val);
-        else if (!unbound (unbox_symbol (symbol)->value))
-          // global
-          unbox_symbol (symbol)->value = val;
-        else
-          unbound_error (symbol);
-
-        goto_return (lm, val);
-      }
+      return_setq (lm, env, frame.setq.symbol, val);
       break;
     case F_CONDITION_CASE:
       // this is the case without errors, just go ahead
@@ -489,6 +457,30 @@ call_subr (Lisp_Subr *usubr, int maxargs, int arity, Lisp_Object *argvals)
     }
 }
 
+static int
+try_inline_eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out)
+{
+  if (symbolp (form))
+    {
+      // symbol: inline eval simply finding binding
+      *out = find_binding (env, form);
+      return 1;
+    }
+  if (consp (form))
+    {
+      // cons: only (quote subform) can be inlined
+      if (eq (f_car (form), q_quote))
+        {
+          *out = f_car (f_cdr (form));
+          return 1;
+        }
+      return 0;
+    }
+  // all other types are self-evaluating
+  *out = form;
+  return 1;
+}
+
 static Lisp_Object
 find_binding (Lisp_Object env, Lisp_Object symbol)
 {
@@ -524,11 +516,18 @@ find_binding (Lisp_Object env, Lisp_Object symbol)
 }
 
 static void
-eval_application (struct lispmachine *lm, Lisp_Object env, Lisp_Object head,
-                  Lisp_Object tail)
+eval_application (struct lispmachine *lm, Lisp_Object env, Lisp_Object form)
 {
-  stack_push_args (env, q_nil, tail);
-  goto_eval (lm, env, head);
+  Lisp_Object inlined;
+
+  if (try_inline_eval (env, f_car (form), &inlined))
+    {
+      return_args (lm, env, inlined, q_nil, f_cdr(form));
+      return;
+    }
+
+  stack_push_args (env, q_nil, f_cdr (form));
+  goto_eval (lm, env, f_car (form));
 }
 
 static void
@@ -627,4 +626,81 @@ xsignal (Lisp_Object symbol, Lisp_Object data)
   Lisp_Object backtrace = stack_backtrace (1);
   Lisp_Object error = make_error (symbol, data, backtrace);
   xsignal_err (error);
+}
+
+static void
+return_if (struct lispmachine *lm, Lisp_Object env, Lisp_Object cond,
+           Lisp_Object body)
+{
+  if (nil (cond))
+    eval_body (lm, env, f_cdr (body));
+  else
+    goto_eval (lm, env, f_car (body));
+}
+
+static void
+return_define (struct lispmachine *lm, Lisp_Object env, Lisp_Object symbol,
+               Lisp_Object value)
+{
+  if (eq (env, l_globalenv))
+    // top level: define in global
+    unbox_symbol (symbol)->value = value;
+  else
+    env_define (env, symbol, value);
+
+  goto_return (lm, value);
+}
+
+static void
+return_setq (struct lispmachine *lm, Lisp_Object env, Lisp_Object symbol,
+             Lisp_Object value)
+{
+  Lisp_Object binding = env_lookup_cell (env, symbol);
+  if (!nil (binding))
+    // local
+    f_setcdr (binding, value);
+  else if (!unbound (unbox_symbol (symbol)->value))
+    // global
+    unbox_symbol (symbol)->value = value;
+  else
+    unbound_error (symbol);
+
+  goto_return (lm, value);
+}
+
+static void
+return_args (struct lispmachine *lm, Lisp_Object env, Lisp_Object value,
+             Lisp_Object argl, Lisp_Object unev)
+{
+  Lisp_Object arglreversed = f_cons (value, argl);
+
+  Lisp_Object inlined;
+  while (!nil (unev) && try_inline_eval (env, f_car (unev), &inlined))
+    {
+      // inlined arguments
+      arglreversed = f_cons (inlined, arglreversed);
+      unev = f_cdr (unev);
+    }
+
+  if (nil (unev))
+    {
+      // every arg is evalled, apply
+
+      // reverse the argl (we appended to head to grow it)
+      // TODO this could be a useful builtin func for reverse list
+      Lisp_Object argsorted = q_nil;
+      Lisp_Object tail = arglreversed;
+      while (!nil (tail))
+        {
+          argsorted = f_cons (f_car (tail), argsorted);
+          tail = f_cdr (tail);
+        }
+      goto_apply (lm, f_car (argsorted), f_cdr (argsorted));
+    }
+  else
+    {
+      // still args to eval
+      stack_push_args (env, arglreversed, f_cdr (unev));
+      goto_eval (lm, env, f_car (unev));
+    }
 }
