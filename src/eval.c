@@ -318,7 +318,7 @@ step_apply (struct lispmachine *lm)
   if (nargs < minargs || nargs > maxargs)
     funcargs_error (minargs, maxargs, nargs);
 
-  int arity = maxargs != MANY ? maxargs : nargs;
+  int arity = maxargs != MANY && maxargs != SPECIAL ? maxargs : nargs;
 
   Lisp_Object *argvals = alloca (arity * sizeof (Lisp_Object));
   Lisp_Object tail = args;
@@ -364,17 +364,10 @@ step_apply (struct lispmachine *lm)
     }
   // fun is subr
 
-  if (eq (fun, fq_apply))
+  if (maxargs == SPECIAL)
     {
-      // dirty trick: we hook the "apply" lisp function here because
-      // it needs being integrated in the machine.
-      goto_apply (lm, f_car (args), f_car (f_cdr (args)));
-      return;
-    }
-  else if (eq (fun, fq_eval_noexpand))
-    {
-      // same trick for eval-noexpand
-      goto_eval (lm, l_globalenv, f_car (args));
+      // special subrs handle the machine directly
+      unbox_subr (fun)->function.f998 (lm, arity, argvals);
       return;
     }
 

@@ -52,6 +52,7 @@ Lisp_Object make_vector (size_t size);
 Lisp_Object make_file_port (FILE *f, Lisp_Port_Direction direction);
 Lisp_Object make_input_string_port (Lisp_Object string);
 Lisp_Object make_output_string_port ();
+Lisp_Object make_continuation (size_t size);
 Lisp_Object defsubr (const char *name, int minargs, int maxargs,
                      union lisp_subr_fun fun);
 

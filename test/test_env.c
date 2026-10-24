@@ -56,7 +56,8 @@ test_env_obarray ()
   TEST_CHECK_TYPE ("eval-noexpand symb", fsymb, LISP_SYMB);
   TEST_CHECK_TYPE ("eval-noexpand subr", unbox_symbol (fsymb)->value,
                    LISP_SUBR);
-  TEST_ASSERT (unbox_subr (unbox_symbol (fsymb)->value)->header.maxargs == 1,
+  TEST_ASSERT (unbox_subr (unbox_symbol (fsymb)->value)->header.maxargs
+                   == SPECIAL,
                "eval-noexpand maxargs");
   return TEST_RESULT_SUCCESS;
 }

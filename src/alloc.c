@@ -148,6 +148,8 @@ make_uninit_port ()
   return p;
 }
 
+// TODO why this port specific code in allocator????
+
 static int
 file_port_get_char (Lisp_Port *p)
 {
@@ -261,6 +263,17 @@ make_output_string_port ()
 }
 
 Lisp_Object
+make_continuation (size_t size)
+{
+  size_t allocsize
+      = sizeof (Lisp_Continuation) + size * sizeof (struct stackframe);
+  Lisp_Continuation *cont = heaploballoc (allocsize);
+  cont->header.type = LISP_CONT;
+  cont->size = size;
+  return box_continuation (cont);
+}
+
+Lisp_Object
 make_string (const char *s)
 {
   return make_nstring (s, strlen (s));
@@ -370,7 +383,7 @@ make_lambda (int minargs, int maxargs, int nargs, Lisp_Object env,
 Lisp_Object
 defsubr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 {
-  if (maxargs != MANY && maxargs > 8)
+  if (maxargs != MANY && maxargs != SPECIAL && maxargs > 8)
     internal_error ("Cannot define subr with %d>8 maxargs, use MANY", maxargs);
 
   Lisp_Object subr = make_subr (name, minargs, maxargs, fun);
@@ -522,6 +535,7 @@ gcmarkobj (Lisp_Object obj)
     case LISP_CHAR:
     case LISP_FLOT:
     case LISP_SUBR:
+    case LISP_CONT:
       break;
     }
 }

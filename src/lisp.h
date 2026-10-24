@@ -19,6 +19,7 @@
 #define FLOTSHIFT 32
 
 #define MANY 999
+#define SPECIAL 998
 
 // value of lisp_port current when nothing was peeked, must differ from EOF
 #define PORT_NOPEEK -2
@@ -81,6 +82,7 @@ typedef enum
   // complex types
   LISP_VECT = IMMDTYPEBASE + (1 << IMMDSUBTAGBITS),
   LISP_PORT,
+  LISP_CONT,
 } Lisp_Type;
 
 typedef enum
@@ -108,6 +110,7 @@ typedef struct lisp_subr Lisp_Subr;
 typedef struct lisp_lambda Lisp_Lambda;
 typedef struct lisp_vector Lisp_Vector;
 typedef struct lisp_port Lisp_Port;
+typedef struct lisp_continuation Lisp_Continuation;
 
 typedef Lisp_Object (*lisp_subr_fun_0) (void);
 typedef Lisp_Object (*lisp_subr_fun_1) (Lisp_Object arg1);
@@ -131,6 +134,9 @@ typedef Lisp_Object (*lisp_subr_fun_8) (Lisp_Object arg1, Lisp_Object arg2,
                                         Lisp_Object arg5, Lisp_Object arg6,
                                         Lisp_Object arg7, Lisp_Object arg8);
 typedef Lisp_Object (*lisp_subr_fun_many) (int argc, Lisp_Object *argv);
+struct lispmachine;
+typedef void (*lisp_subr_fun_spec) (struct lispmachine *lm, int argc,
+                                    Lisp_Object *argv);
 
 struct lisp_cons
 {
@@ -184,8 +190,10 @@ union lisp_subr_fun
   lisp_subr_fun_6 f6;
   lisp_subr_fun_7 f7;
   lisp_subr_fun_8 f8;
-  // sorry for for magic number 999, it's a dirty trick with a macro.
-  // TODO: REMOVE THIS call it fMANY
+  // sorry for for magic numbers 998 and 999, it's a dirty trick with
+  // a macro.
+  // TODO: REMOVE THIS call these fSPECIAL and fMANY
+  lisp_subr_fun_spec f998; /* special */
   lisp_subr_fun_many f999; /* many */
 };
 
@@ -245,6 +253,15 @@ struct lisp_port
   int (*get_char) (struct lisp_port *p);
   int (*put_char) (int c, struct lisp_port *p);
   int (*close) (struct lisp_port *p);
+};
+
+struct stackframe; // forward declaration, type defined in stack.h
+
+struct lisp_continuation
+{
+  struct lisp_cplx_header header;
+  size_t size;
+  struct stackframe *stack;
 };
 
 /* Conversion from/to boxed Lisp_Object to/from explicit types */
@@ -325,6 +342,18 @@ static inline Lisp_Port *
 unbox_port (Lisp_Object v)
 {
   return (Lisp_Port *)unbox_pointer (v);
+}
+
+static inline Lisp_Object
+box_continuation (Lisp_Continuation *s)
+{
+  return ((uint64_t)s) | LISP_TAG_CPLX;
+}
+
+static inline Lisp_Continuation *
+unbox_continuation (Lisp_Object v)
+{
+  return (Lisp_Continuation *)unbox_pointer (v);
 }
 
 static inline Lisp_Object
@@ -449,6 +478,8 @@ type_name (Lisp_Type t)
       return "CHAR";
     case LISP_PORT:
       return "PORT";
+    case LISP_CONT:
+      return "CONT";
     }
   return "UNKN";
 }
@@ -476,8 +507,8 @@ Lisp_Object f_string_p (Lisp_Object o);
 Lisp_Object f_vector_p (Lisp_Object o);
 Lisp_Object f_char_p (Lisp_Object o);
 Lisp_Object f_null_p (Lisp_Object o);
-Lisp_Object f_eval_noexpand (Lisp_Object form);
-Lisp_Object f_apply (Lisp_Object fun, Lisp_Object args);
+void f_eval_noexpand (struct lispmachine *lm, int argc, Lisp_Object *argv);
+void f_apply (struct lispmachine *lm, int argc, Lisp_Object *argv);
 Lisp_Object f_assoc (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_assq (Lisp_Object key, Lisp_Object alist);
 Lisp_Object f_rassoc (Lisp_Object key, Lisp_Object alist);
@@ -571,8 +602,6 @@ extern Lisp_Object v_obarray;
 extern Lisp_Object p_current_input_port;
 extern Lisp_Object p_current_output_port;
 extern Lisp_Object l_globalenv;
-extern Lisp_Object fq_apply;
-extern Lisp_Object fq_eval_noexpand;
 
 void init_builtins ();
 
@@ -657,6 +686,12 @@ static inline int
 portp (Lisp_Object o)
 {
   return tag_of (o) == LISP_TAG_CPLX && complex_type_of (o) == LISP_PORT;
+}
+
+static inline int
+continuationp (Lisp_Object o)
+{
+  return tag_of (o) == LISP_TAG_CPLX && complex_type_of (o) == LISP_CONT;
 }
 
 static inline int

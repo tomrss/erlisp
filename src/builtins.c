@@ -49,8 +49,6 @@ Lisp_Object v_obarray;
 Lisp_Object p_current_input_port;
 Lisp_Object p_current_output_port;
 Lisp_Object l_globalenv;
-Lisp_Object fq_apply;
-Lisp_Object fq_eval_noexpand;
 
 typedef Lisp_Object (*lisp_2_pred) (Lisp_Object x, Lisp_Object y);
 
@@ -120,18 +118,16 @@ f_symbol_value (Lisp_Object symbol)
   return val;
 }
 
-Lisp_Object
-f_eval_noexpand (UNUSED Lisp_Object form)
+void
+f_eval_noexpand (struct lispmachine *lm, UNUSED int argc, Lisp_Object *argv)
 {
-  internal_error (
-      "shouldn't be here, this is hooked directly in lisp machine");
+  goto_eval (lm, l_globalenv, argv[0]);
 }
 
-Lisp_Object
-f_apply (UNUSED Lisp_Object fun, UNUSED Lisp_Object args)
+void
+f_apply (struct lispmachine *lm, UNUSED int argc, Lisp_Object *argv)
 {
-  internal_error (
-      "shouldn't be here, this is hooked directly in lisp machine");
+  goto_apply (lm, argv[0], argv[1]);
 }
 
 Lisp_Object
@@ -1334,13 +1330,8 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("vector?", 1, 1, f_vector_p));
   obarray_put (o, DEFSUBR ("char?", 1, 1, f_char_p));
   obarray_put (o, DEFSUBR ("nil?", 1, 1, f_nil_p));
-  // the machine recognizes these subr objects in step_apply
-  fq_eval_noexpand
-      = unbox_symbol (
-            obarray_put (o, DEFSUBR ("eval-noexpand", 1, 1, f_eval_noexpand)))
-            ->value;
-  fq_apply = unbox_symbol (obarray_put (o, DEFSUBR ("apply", 2, 2, f_apply)))
-                 ->value;
+  obarray_put (o, DEFSUBR ("eval-noexpand", 1, SPECIAL, f_eval_noexpand));
+  obarray_put (o, DEFSUBR ("apply", 2, SPECIAL, f_apply));
   obarray_put (o, DEFSUBR ("assoc", 2, 2, f_assoc));
   obarray_put (o, DEFSUBR ("assq", 2, 2, f_assq));
   obarray_put (o, DEFSUBR ("rassoc", 2, 2, f_rassoc));
