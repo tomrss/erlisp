@@ -546,7 +546,7 @@ gcmark ()
   gcmarkobj (p_current_output_port);
 
   // code that is being evaluated in the stack is a gc root
-  stack_walk (gcmarkstackframe);
+  lispmachine_cur_stack_walk (gcmarkstackframe);
 
   // all lisp machine registers are gc roots
   lispmachine_cur_regs_walk (gcmarkobj);

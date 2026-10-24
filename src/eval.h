@@ -2,6 +2,7 @@
 #define EVAL_H
 
 #include "lisp.h"
+#include "stack.h"
 #include <setjmp.h>
 
 #define LMEND 0
@@ -41,11 +42,13 @@ int lispmachine_step (struct lispmachine *lm);
 Lisp_Object lispmachine_get_value (struct lispmachine *lm);
 int lispmachine_handle (struct lispmachine *lm);
 void lispmachine_regs_walk (struct lispmachine *lm, void (*fun) (Lisp_Object));
+void lispmachine_stack_walk (struct lispmachine *lm, void (*fun) (struct stackframe));
 
 // entrypoints for single-machine language, to be removed in the future
 int eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out);
 int eval_toplevel (Lisp_Object form, Lisp_Object *out);
 void lispmachine_cur_regs_walk (void (*fun) (Lisp_Object));
+void lispmachine_cur_stack_walk (void (*fun) (struct stackframe));
 
 NORETURN void xsignal (Lisp_Object symbol, Lisp_Object data);
 NORETURN void xsignal_err (Lisp_Object err);

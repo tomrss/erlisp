@@ -41,11 +41,11 @@ struct lispmachine *
 lispmachine_init (Lisp_Object env, Lisp_Object form)
 {
   struct lispmachine *lm = malloc (sizeof (struct lispmachine));
-  lm->stack = NULL; // TODO for now stack is global
+  lm->stack = stack_init ();
   lm->reductions = 0;
   lm->err = q_nil;
   goto_eval (lm, env, form);
-  stack_push_halt (env);
+  stack_push_halt (lm->stack, env);
   return lm;
 };
 
@@ -84,7 +84,7 @@ lispmachine_handle (struct lispmachine *lm)
   Lisp_Object errsym = f_car (err);
 
   struct stackframe frame;
-  while ((frame = stack_pop ()).kind != F_HALT)
+  while ((frame = stack_pop (lm->stack)).kind != F_HALT)
     {
       switch (frame.kind)
         {
@@ -116,7 +116,7 @@ lispmachine_handle (struct lispmachine *lm)
           }
           break;
         case F_UNWIND_PROTECT:
-          stack_push_reraise (frame.env, err);
+          stack_push_reraise (lm->stack, frame.env, err);
           eval_body (lm, frame.env, frame.unwindprotect.cleanups);
           return 1;
         default:
@@ -198,6 +198,20 @@ lispmachine_regs_walk (struct lispmachine *lm, void (*fun) (Lisp_Object))
   fun (lm->err);
 }
 
+void
+lispmachine_cur_stack_walk (void (*fun) (struct stackframe))
+{
+  if (currentlm == NULL)
+    return;
+  lispmachine_stack_walk (currentlm, fun);
+}
+
+void
+lispmachine_stack_walk (struct lispmachine *lm, void (*fun) (struct stackframe))
+{
+  stack_walk (lm->stack, fun);
+}
+
 static void
 step_eval (struct lispmachine *lm)
 {
@@ -233,7 +247,7 @@ step_eval (struct lispmachine *lm)
             return_if (lm, env, inlined, f_cdr (tail));
           else
             {
-              stack_push_if (env, f_cdr (tail));
+              stack_push_if (lm->stack, env, f_cdr (tail));
               goto_eval (lm, env, f_car (tail));
             }
           break;
@@ -252,7 +266,7 @@ step_eval (struct lispmachine *lm)
             return_define (lm, env, f_car (tail), inlined);
           else
             {
-              stack_push_define (env, f_car (tail));
+              stack_push_define (lm->stack, env, f_car (tail));
               goto_eval (lm, env, f_car (f_cdr (tail)));
             }
           break;
@@ -264,17 +278,18 @@ step_eval (struct lispmachine *lm)
             return_setq (lm, env, f_car (tail), inlined);
           else
             {
-              stack_push_setq (env, f_car (tail));
+              stack_push_setq (lm->stack, env, f_car (tail));
               goto_eval (lm, env, f_car (f_cdr (tail)));
             }
           break;
         case SF_UNWIND_PROTECT:
-          stack_push_unwindprotect (env, f_cdr (tail));
+          stack_push_unwindprotect (lm->stack, env, f_cdr (tail));
           goto_eval (lm, env, f_car (tail));
           break;
         case SF_CONDITION_CASE:
           check_type (f_car (tail), LISP_SYMB);
-          stack_push_conditioncase (env, f_car (tail), f_cdr (f_cdr (tail)));
+          stack_push_conditioncase (lm->stack, env, f_car (tail),
+                                    f_cdr (f_cdr (tail)));
           goto_eval (lm, env, f_car (f_cdr (tail)));
           break;
         }
@@ -371,7 +386,7 @@ step_apply (struct lispmachine *lm)
 static int
 step_return (struct lispmachine *lm)
 {
-  struct stackframe frame = stack_pop ();
+  struct stackframe frame = stack_pop (lm->stack);
   Lisp_Object env = frame.env;
   Lisp_Object val = lm->mreturn.val;
 
@@ -399,7 +414,7 @@ step_return (struct lispmachine *lm)
       goto_return (lm, val);
       break;
     case F_UNWIND_PROTECT:
-      stack_push_restore (frame.env, val);
+      stack_push_restore (lm->stack, frame.env, val);
       eval_body (lm, frame.env, frame.unwindprotect.cleanups);
       break;
     case F_RERAISE:
@@ -522,11 +537,11 @@ eval_application (struct lispmachine *lm, Lisp_Object env, Lisp_Object form)
 
   if (try_inline_eval (env, f_car (form), &inlined))
     {
-      return_args (lm, env, inlined, q_nil, f_cdr(form));
+      return_args (lm, env, inlined, q_nil, f_cdr (form));
       return;
     }
 
-  stack_push_args (env, q_nil, f_cdr (form));
+  stack_push_args (lm->stack, env, q_nil, f_cdr (form));
   goto_eval (lm, env, f_car (form));
 }
 
@@ -540,7 +555,7 @@ eval_body (struct lispmachine *lm, Lisp_Object env, Lisp_Object tail)
     }
 
   if (!nil (f_cdr (tail)))
-    stack_push_seq (env, f_cdr (tail));
+    stack_push_seq (lm->stack, env, f_cdr (tail));
 
   goto_eval (lm, env, f_car (tail));
 }
@@ -623,7 +638,11 @@ make_error (Lisp_Object symbol, Lisp_Object data, Lisp_Object backtrace)
 NORETURN void
 xsignal (Lisp_Object symbol, Lisp_Object data)
 {
-  Lisp_Object backtrace = stack_backtrace (1);
+  Lisp_Object backtrace;
+  if (currentlm != NULL)
+    backtrace = stack_backtrace (currentlm->stack, 1);
+  else
+    backtrace = q_nil;
   Lisp_Object error = make_error (symbol, data, backtrace);
   xsignal_err (error);
 }
@@ -700,7 +719,7 @@ return_args (struct lispmachine *lm, Lisp_Object env, Lisp_Object value,
   else
     {
       // still args to eval
-      stack_push_args (env, arglreversed, f_cdr (unev));
+      stack_push_args (lm->stack, env, arglreversed, f_cdr (unev));
       goto_eval (lm, env, f_car (unev));
     }
 }

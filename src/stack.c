@@ -1,10 +1,7 @@
 #include "stack.h"
-#include "alloc.h"
 #include "error.h"
 #include "lisp.h"
 #include <stddef.h>
-
-static struct stack *stack;
 
 static struct stackpage *
 page_new (struct stack *s)
@@ -18,21 +15,20 @@ page_new (struct stack *s)
   return page;
 }
 
-void
+struct stack *
 stack_init ()
 {
-  stack = malloc (sizeof (struct stack));
+  struct stack *s = malloc (sizeof (struct stack));
   // TODO check malloc
-  stack->numpages = 0;
-  stack->pages = NULL;
-  page_new (stack);
+  s->numpages = 0;
+  s->pages = NULL;
+  page_new (s);
+  return s;
 }
 
 void
-stack_push (struct stackframe sf)
+stack_push (struct stack *s, struct stackframe sf)
 {
-  struct stack *s = stack; // to ease refactoring later, this will be arg
-
   if (s->pages->depth >= STACKPAGESIZE)
     {
       if (s->numpages >= STACKMAXPAGES)
@@ -45,18 +41,18 @@ stack_push (struct stackframe sf)
 }
 
 void
-stack_push_halt (Lisp_Object env)
+stack_push_halt (struct stack *s, Lisp_Object env)
 {
   struct stackframe sf = {
     .kind = F_HALT,
     .env = env,
   };
   sf.slots[0] = sf.slots[1] = q_nil;
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_seq (Lisp_Object env, Lisp_Object rest)
+stack_push_seq (struct stack *s, Lisp_Object env, Lisp_Object rest)
 {
   struct stackframe sf = {
     .kind = F_SEQ,
@@ -64,22 +60,22 @@ stack_push_seq (Lisp_Object env, Lisp_Object rest)
     .seq = { .rest = rest },
   };
   sf.slots[1] = q_nil;
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_args (Lisp_Object env, Lisp_Object argl, Lisp_Object unev)
+stack_push_args (struct stack *s, Lisp_Object env, Lisp_Object argl, Lisp_Object unev)
 {
   struct stackframe sf = {
     .kind = F_ARGS,
     .env = env,
     .args = { .argl = argl, .unev = unev },
   };
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_if (Lisp_Object env, Lisp_Object body)
+stack_push_if (struct stack *s, Lisp_Object env, Lisp_Object body)
 {
   struct stackframe sf = {
     .kind = F_IF,
@@ -87,11 +83,11 @@ stack_push_if (Lisp_Object env, Lisp_Object body)
     .if_ = { .body = body },
   };
   sf.slots[1] = q_nil;
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_define (Lisp_Object env, Lisp_Object symbol)
+stack_push_define (struct stack *s, Lisp_Object env, Lisp_Object symbol)
 {
   struct stackframe sf = {
     .kind = F_DEFINE,
@@ -99,11 +95,11 @@ stack_push_define (Lisp_Object env, Lisp_Object symbol)
     .define = { .symbol = symbol },
   };
   sf.slots[1] = q_nil;
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_setq (Lisp_Object env, Lisp_Object symbol)
+stack_push_setq (struct stack *s, Lisp_Object env, Lisp_Object symbol)
 {
   struct stackframe sf = {
     .kind = F_SETQ,
@@ -111,11 +107,11 @@ stack_push_setq (Lisp_Object env, Lisp_Object symbol)
     .setq = { .symbol = symbol },
   };
   sf.slots[1] = q_nil;
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_conditioncase (Lisp_Object env, Lisp_Object errsym,
+stack_push_conditioncase (struct stack *s, Lisp_Object env, Lisp_Object errsym,
                           Lisp_Object handlers)
 {
   struct stackframe sf = {
@@ -123,11 +119,11 @@ stack_push_conditioncase (Lisp_Object env, Lisp_Object errsym,
     .env = env,
     .conditioncase = { .handlers = handlers, .errsym = errsym },
   };
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_unwindprotect (Lisp_Object env, Lisp_Object cleanups)
+stack_push_unwindprotect (struct stack *s, Lisp_Object env, Lisp_Object cleanups)
 {
   struct stackframe sf = {
     .kind = F_UNWIND_PROTECT,
@@ -135,11 +131,11 @@ stack_push_unwindprotect (Lisp_Object env, Lisp_Object cleanups)
     .unwindprotect = { .cleanups = cleanups },
   };
   sf.slots[1] = q_nil;
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_restore (Lisp_Object env, Lisp_Object val)
+stack_push_restore (struct stack *s, Lisp_Object env, Lisp_Object val)
 {
   struct stackframe sf = {
     .kind = F_RESTORE,
@@ -147,11 +143,11 @@ stack_push_restore (Lisp_Object env, Lisp_Object val)
     .restore = { .val = val },
   };
   sf.slots[1] = q_nil;
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 void
-stack_push_reraise (Lisp_Object env, Lisp_Object err)
+stack_push_reraise (struct stack *s, Lisp_Object env, Lisp_Object err)
 {
   struct stackframe sf = {
     .kind = F_RERAISE,
@@ -159,14 +155,12 @@ stack_push_reraise (Lisp_Object env, Lisp_Object err)
     .reraise = { .err = err },
   };
   sf.slots[1] = q_nil;
-  stack_push (sf);
+  stack_push (s, sf);
 }
 
 struct stackframe
-stack_pop ()
+stack_pop (struct stack *s)
 {
-  struct stack *s = stack; // to ease refactoring later, this will be arg
-
   if (s->pages->depth == 0 && s->numpages == 1)
     internal_error ("Unable to pop beginning of stack");
 
@@ -183,18 +177,9 @@ stack_pop ()
   return sf;
 }
 
-size_t
-stack_depth_current ()
-{
-  struct stack *s = stack; // to ease refactoring later, this will be arg
-  return (s->numpages - 1) * STACKPAGESIZE + s->pages->depth;
-}
-
 void
-stack_walk (void (*fun) (struct stackframe))
+stack_walk (struct stack *s, void (*fun) (struct stackframe))
 {
-  struct stack *s = stack; // to ease refactoring later, this will be arg
-
   struct stackpage *page = s->pages;
   while (page != NULL)
     {
@@ -206,7 +191,7 @@ stack_walk (void (*fun) (struct stackframe))
 }
 
 Lisp_Object
-stack_backtrace (UNUSED int depthfrom)
+stack_backtrace (UNUSED struct stack *s, UNUSED int depthfrom)
 {
   Lisp_Object backtrace = q_nil;
 

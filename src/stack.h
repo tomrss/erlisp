@@ -63,22 +63,20 @@ struct stack
   struct stackpage *pages;
 };
 
-void stack_init ();
-void stack_push (struct stackframe sf);
-void stack_push_halt (Lisp_Object env);
-void stack_push_seq (Lisp_Object env, Lisp_Object rest);
-void stack_push_args (Lisp_Object env, Lisp_Object argl, Lisp_Object unev);
-void stack_push_if (Lisp_Object env, Lisp_Object body);
-void stack_push_define (Lisp_Object env, Lisp_Object symbol);
-void stack_push_setq (Lisp_Object env, Lisp_Object symbol);
-void stack_push_conditioncase (Lisp_Object env, Lisp_Object errsym,
+struct stack *stack_init ();
+void stack_push_halt (struct stack *s, Lisp_Object env);
+void stack_push_seq (struct stack *s, Lisp_Object env, Lisp_Object rest);
+void stack_push_args (struct stack *s, Lisp_Object env, Lisp_Object argl, Lisp_Object unev);
+void stack_push_if (struct stack *s, Lisp_Object env, Lisp_Object body);
+void stack_push_define (struct stack *s, Lisp_Object env, Lisp_Object symbol);
+void stack_push_setq (struct stack *s, Lisp_Object env, Lisp_Object symbol);
+void stack_push_conditioncase (struct stack *s, Lisp_Object env, Lisp_Object errsym,
                                Lisp_Object handlers);
-void stack_push_unwindprotect (Lisp_Object env, Lisp_Object cleanups);
-void stack_push_restore (Lisp_Object env, Lisp_Object val);
-void stack_push_reraise (Lisp_Object env, Lisp_Object err);
-struct stackframe stack_pop ();
-size_t stack_depth_current ();
-void stack_walk (void (*fun) (struct stackframe));
-Lisp_Object stack_backtrace (int depthfrom);
+void stack_push_unwindprotect (struct stack *s, Lisp_Object env, Lisp_Object cleanups);
+void stack_push_restore (struct stack *s, Lisp_Object env, Lisp_Object val);
+void stack_push_reraise (struct stack *s, Lisp_Object env, Lisp_Object err);
+struct stackframe stack_pop (struct stack *s);
+void stack_walk (struct stack *s, void (*fun) (struct stackframe));
+Lisp_Object stack_backtrace (struct stack *s, int depthfrom);
 
 #endif /* STACK_H */
