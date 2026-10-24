@@ -1,6 +1,5 @@
 #include "env.h"
 #include "lisp.h"
-#include "stack.h"
 #include <stdio.h>
 
 // just a marker we use as anchor for the env alist
@@ -37,12 +36,4 @@ env_lookup (Lisp_Object env, Lisp_Object symbol)
 {
   Lisp_Object cell = env_lookup_cell (env, symbol);
   return nil (cell) ? q_unbound : f_cdr (cell);
-}
-
-// TODO: this implementation makes multithreading impossible.
-// TODO I don't want to keep this function here, don't want to import stack.
-Lisp_Object
-env_current ()
-{
-  return stack_current ().env;
 }

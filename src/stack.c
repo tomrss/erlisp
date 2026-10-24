@@ -19,14 +19,13 @@ page_new (struct stack *s)
 }
 
 void
-stack_init (Lisp_Object baseenv)
+stack_init ()
 {
   stack = malloc (sizeof (struct stack));
   // TODO check malloc
   stack->numpages = 0;
   stack->pages = NULL;
   page_new (stack);
-  stack_push ((struct stackframe){ .fname = "base", .env = baseenv });
 }
 
 void
@@ -43,6 +42,124 @@ stack_push (struct stackframe sf)
     }
 
   s->pages->frames[s->pages->depth++] = sf;
+}
+
+void
+stack_push_halt (Lisp_Object env)
+{
+  struct stackframe sf = {
+    .kind = F_HALT,
+    .env = env,
+  };
+  sf.slots[0] = sf.slots[1] = q_nil;
+  stack_push (sf);
+}
+
+void
+stack_push_seq (Lisp_Object env, Lisp_Object rest)
+{
+  struct stackframe sf = {
+    .kind = F_SEQ,
+    .env = env,
+    .seq = { .rest = rest },
+  };
+  sf.slots[1] = q_nil;
+  stack_push (sf);
+}
+
+void
+stack_push_args (Lisp_Object env, Lisp_Object argl, Lisp_Object unev)
+{
+  struct stackframe sf = {
+    .kind = F_ARGS,
+    .env = env,
+    .args = { .argl = argl, .unev = unev },
+  };
+  stack_push (sf);
+}
+
+void
+stack_push_if (Lisp_Object env, Lisp_Object body)
+{
+  struct stackframe sf = {
+    .kind = F_IF,
+    .env = env,
+    .if_ = { .body = body },
+  };
+  sf.slots[1] = q_nil;
+  stack_push (sf);
+}
+
+void
+stack_push_define (Lisp_Object env, Lisp_Object symbol)
+{
+  struct stackframe sf = {
+    .kind = F_DEFINE,
+    .env = env,
+    .define = { .symbol = symbol },
+  };
+  sf.slots[1] = q_nil;
+  stack_push (sf);
+}
+
+void
+stack_push_setq (Lisp_Object env, Lisp_Object symbol)
+{
+  struct stackframe sf = {
+    .kind = F_SETQ,
+    .env = env,
+    .setq = { .symbol = symbol },
+  };
+  sf.slots[1] = q_nil;
+  stack_push (sf);
+}
+
+void
+stack_push_conditioncase (Lisp_Object env, Lisp_Object errsym,
+                          Lisp_Object handlers)
+{
+  struct stackframe sf = {
+    .kind = F_CONDITION_CASE,
+    .env = env,
+    .conditioncase = { .handlers = handlers, .errsym = errsym },
+  };
+  stack_push (sf);
+}
+
+void
+stack_push_unwindprotect (Lisp_Object env, Lisp_Object cleanups)
+{
+  struct stackframe sf = {
+    .kind = F_UNWIND_PROTECT,
+    .env = env,
+    .unwindprotect = { .cleanups = cleanups },
+  };
+  sf.slots[1] = q_nil;
+  stack_push (sf);
+}
+
+void
+stack_push_restore (Lisp_Object env, Lisp_Object val)
+{
+  struct stackframe sf = {
+    .kind = F_RESTORE,
+    .env = env,
+    .restore = { .val = val },
+  };
+  sf.slots[1] = q_nil;
+  stack_push (sf);
+}
+
+void
+stack_push_reraise (Lisp_Object env, Lisp_Object err)
+{
+  struct stackframe sf = {
+    .kind = F_RERAISE,
+    .env = env,
+    .reraise = { .err = err },
+  };
+  sf.slots[1] = q_nil;
+  stack_push (sf);
 }
 
 struct stackframe
@@ -66,34 +183,11 @@ stack_pop ()
   return sf;
 }
 
-struct stackframe
-stack_current ()
-{
-  struct stack *s = stack; // to ease refactoring later, this will be arg
-
-  return s->pages->frames[s->pages->depth - 1];
-}
-
-struct stackframe *
-stack_current_ref ()
-{
-  struct stack *s = stack; // to ease refactoring later, this will be arg
-
-  return &s->pages->frames[s->pages->depth - 1];
-}
-
 size_t
 stack_depth_current ()
 {
   struct stack *s = stack; // to ease refactoring later, this will be arg
   return (s->numpages - 1) * STACKPAGESIZE + s->pages->depth;
-}
-
-void
-stack_current_set_env (Lisp_Object env)
-{
-  struct stack *s = stack; // to ease refactoring later, this will be arg
-  s->pages->frames[s->pages->depth - 1].env = env;
 }
 
 void
@@ -111,48 +205,34 @@ stack_walk (void (*fun) (struct stackframe))
     }
 }
 
-void
-stack_unwind (int depthfrom, void (*fun) (struct stackframe *))
-{
-  while (stack_depth_current () > (size_t)depthfrom)
-    {
-      struct stackframe *sf = stack_current_ref ();
-      if (fun != NULL)
-        fun (sf);
-
-      // pop only after func invocation for correct gc roots during exec of fun
-      stack_pop ();
-    }
-}
-
 Lisp_Object
-stack_backtrace (int depthfrom)
+stack_backtrace (UNUSED int depthfrom)
 {
   Lisp_Object backtrace = q_nil;
-  Lisp_Object tail = q_nil;
 
-  struct stack *s = stack; // to ease refactoring later, this will be arg
+  // TODO: commented out code; with the new evaluator with lispmachine
+  // i still don't know how to do it. i will think of it in the future.
+  /* Lisp_Object tail = q_nil; */
+  /* int depth = stack_depth_current () - 1; */
+  /* struct stackpage *page = s->pages; */
+  /* while (page != NULL) */
+  /*   { */
+  /*     for (int i = page->depth - 1; i >= 0; i--) */
+  /*       { */
+  /*         if (depth-- < depthfrom) */
+  /*           break; */
 
-  int depth = stack_depth_current () - 1;
-  struct stackpage *page = s->pages;
-  while (page != NULL)
-    {
-      for (int i = page->depth - 1; i >= 0; i--)
-        {
-          if (depth-- < depthfrom)
-            break;
+  /*         struct stackframe sf = page->frames[i]; */
+  /*         Lisp_Object cell = f_cons (make_string (sf.fname), q_nil); */
+  /*         if (nil (backtrace)) */
+  /*           backtrace = cell; */
+  /*         else */
+  /*           f_setcdr (tail, cell); */
+  /*         tail = cell; */
+  /*       } */
 
-          struct stackframe sf = page->frames[i];
-          Lisp_Object cell = f_cons (make_string (sf.fname), q_nil);
-          if (nil (backtrace))
-            backtrace = cell;
-          else
-            f_setcdr (tail, cell);
-          tail = cell;
-        }
-
-      page = page->next;
-    }
+  /*     page = page->next; */
+  /*   } */
 
   return backtrace;
 }

@@ -552,6 +552,7 @@ extern Lisp_Object q_lambda;
 extern Lisp_Object q_define;
 extern Lisp_Object q_eval;
 extern Lisp_Object q_cons;
+extern Lisp_Object q_read;
 extern Lisp_Object q_error;
 extern Lisp_Object q_error_arith;
 extern Lisp_Object q_error_file;
@@ -570,6 +571,8 @@ extern Lisp_Object v_obarray;
 extern Lisp_Object p_current_input_port;
 extern Lisp_Object p_current_output_port;
 extern Lisp_Object l_globalenv;
+extern Lisp_Object fq_apply;
+extern Lisp_Object fq_eval_noexpand;
 
 void init_builtins ();
 

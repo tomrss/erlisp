@@ -24,6 +24,8 @@
 #define SMALL_LMBD_SIZE                                                       \
   (sizeof (Lisp_Lambda) + SMALL_LMBD_NARGS * sizeof (Lisp_Object))
 
+static Lisp_Object l_gcartificialroots;
+
 static inline int
 is_small_string (size_t size)
 {
@@ -95,6 +97,9 @@ init_alloc ()
   heap->usedsize = 0;
   heap->lastgcused = 0;
   heap->gcgenerations = 0;
+
+  // artificial roots are something rarely used
+  l_gcartificialroots = q_nil;
 }
 
 Lisp_Object
@@ -398,6 +403,42 @@ gc_maybe ()
   return 0;
 }
 
+void
+gcprotect (Lisp_Object obj)
+{
+  if (nil (obj))
+    return;
+
+  l_gcartificialroots = f_cons (obj, l_gcartificialroots);
+}
+
+void
+gcunprotect (Lisp_Object obj)
+{
+  if (nil (obj))
+    return;
+
+  Lisp_Object tail = l_gcartificialroots;
+  Lisp_Object prevcell = q_nil;
+  while (!nil (tail))
+    {
+      if (eq (f_car (tail), obj))
+        {
+          Lisp_Object rest = f_cdr (tail);
+          if (nil (prevcell))
+            l_gcartificialroots = rest;
+          else
+            f_setcdr (prevcell, rest);
+          return;
+        }
+      prevcell = tail;
+      tail = f_cdr (tail);
+    }
+  // this could be serious, but we are not taking this artificial
+  // roots so seriously: just ignore it.
+  return;
+}
+
 struct memstats
 gc ()
 {
@@ -488,12 +529,9 @@ gcmarkobj (Lisp_Object obj)
 static void
 gcmarkstackframe (struct stackframe sf)
 {
-  gcmarkobj (sf.form);
   gcmarkobj (sf.env);
-  for (int j = 0; j < sf.nargs; j++)
-    gcmarkobj (sf.argvals[j]);
-  gcmarkobj (sf.cleanups);
-  gcmarkobj (sf.keepalive);
+  gcmarkobj (sf.slots[0]);
+  gcmarkobj (sf.slots[1]);
 }
 
 static void
@@ -510,9 +548,11 @@ gcmark ()
   // code that is being evaluated in the stack is a gc root
   stack_walk (gcmarkstackframe);
 
-  // errors in the handlers must not be collected, they are roots
-  // TODO not clean because depends on eval.h
-  handlers_walk (&gcmarkobj);
+  // all lisp machine registers are gc roots
+  lispmachine_cur_regs_walk (gcmarkobj);
+
+  // artificial roots
+  gcmarkobj (l_gcartificialroots);
 
   // TODO: obarray symbols should be protected from gc in other
   // way. maybe definining a "pure lisp" memory like in Emacs Lisp

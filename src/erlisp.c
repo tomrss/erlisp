@@ -10,15 +10,11 @@
 #include <readline/readline.h>
 #endif /* HAVE_READLINE */
 
-static Lisp_Object
-read_eval (Lisp_Object line)
-{
-  return eval_toplevel (f_read (line));
-}
-
 int
 main (int argc, char **argv)
 {
+  Lisp_Object res;
+
   init_alloc ();
   init_builtins ();
 
@@ -27,7 +23,6 @@ main (int argc, char **argv)
       // repl
       printf ("ErLisp v0.1.0\n");
 
-      Lisp_Object res;
       char *line = NULL;
       ssize_t lenline;
       int linum = 1;
@@ -64,18 +59,24 @@ main (int argc, char **argv)
               break;
             }
           Lisp_Object port = f_open_input_string (make_string (line));
-          if (condition_case_1 (read_eval, port, &res))
+
+          // build form: "(read port)"
+          Lisp_Object readlineform = f_cons (q_read, f_cons (port, q_nil));
+          Lisp_Object form;
+          if (eval (l_globalenv, readlineform, &form))
             {
-              print_form (res, 0);
-              printf ("\n");
+              if (eq (form, q_eof))
+                continue;
+
+              if (eval_toplevel (form, &res))
+                print_form (res, 0);
+              else
+                print_error (res);
             }
           else
-            {
-              print_error (res);
-            }
+            print_error (form);
 
-          gc ();
-
+          printf ("\n");
           linum++;
         }
 
@@ -85,9 +86,16 @@ main (int argc, char **argv)
 
   // parse and eval file
 
+  // build form "(load path)"
   Lisp_Object load = f_intern (make_string ("load"));
   Lisp_Object path = make_string (argv[1]);
-  eval_toplevel (f_cons (load, f_cons (path, q_nil)));
+  Lisp_Object loadform = f_cons (load, f_cons (path, q_nil));
+
+  if (!eval_toplevel (loadform, &res))
+    {
+      print_error (res);
+      return 1;
+    }
 
   return 0;
 }

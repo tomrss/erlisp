@@ -58,6 +58,8 @@ Lisp_Object defsubr (const char *name, int minargs, int maxargs,
 void init_alloc ();
 struct memstats gc ();
 int gc_maybe ();
+void gcprotect (Lisp_Object obj);
+void gcunprotect (Lisp_Object obj);
 struct memstats memstats ();
 void print_memstats (struct memstats);
 void memdump ();

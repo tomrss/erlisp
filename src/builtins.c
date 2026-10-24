@@ -30,6 +30,7 @@ Lisp_Object q_lambda;
 Lisp_Object q_define;
 Lisp_Object q_eval;
 Lisp_Object q_cons;
+Lisp_Object q_read;
 Lisp_Object q_error;
 Lisp_Object q_error_arith;
 Lisp_Object q_error_file;
@@ -48,6 +49,8 @@ Lisp_Object v_obarray;
 Lisp_Object p_current_input_port;
 Lisp_Object p_current_output_port;
 Lisp_Object l_globalenv;
+Lisp_Object fq_apply;
+Lisp_Object fq_eval_noexpand;
 
 typedef Lisp_Object (*lisp_2_pred) (Lisp_Object x, Lisp_Object y);
 
@@ -107,19 +110,28 @@ f_symbol_value (Lisp_Object symbol)
 {
   check_type (symbol, LISP_SYMB);
 
-  return eval_symbol (env_current (), symbol);
+  // global value only: lexical env is not exposed to lisp
+  if (eq (symbol, q_t) || nil (symbol))
+    return symbol;
+
+  Lisp_Object val = unbox_symbol (symbol)->value;
+  if (unbound (val))
+    unbound_error (symbol);
+  return val;
 }
 
 Lisp_Object
-f_eval_noexpand (Lisp_Object form)
+f_eval_noexpand (UNUSED Lisp_Object form)
 {
-  return eval (l_globalenv, form);
+  internal_error (
+      "shouldn't be here, this is hooked directly in lisp machine");
 }
 
 Lisp_Object
-f_apply (Lisp_Object fun, Lisp_Object args)
+f_apply (UNUSED Lisp_Object fun, UNUSED Lisp_Object args)
 {
-  return apply (env_current (), fun, args);
+  internal_error (
+      "shouldn't be here, this is hooked directly in lisp machine");
 }
 
 Lisp_Object
@@ -691,8 +703,7 @@ Lisp_Object
 f_defined_p (Lisp_Object symbol)
 {
   check_type (symbol, LISP_SYMB);
-  if (!unbound (env_lookup (env_current (), symbol)))
-    return q_t;
+  // global value only: lexical env is not exposed to lisp
   return BOOL (!unbound (unbox_symbol (symbol)->value));
 }
 
@@ -1265,7 +1276,7 @@ init_builtins ()
   p_current_output_port = make_file_port (stdout, PORT_OUT);
 
   l_globalenv = env_new (q_nil);
-  stack_init (l_globalenv);
+  stack_init ();
 
   init_prelude ();
 }
@@ -1323,8 +1334,13 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("vector?", 1, 1, f_vector_p));
   obarray_put (o, DEFSUBR ("char?", 1, 1, f_char_p));
   obarray_put (o, DEFSUBR ("nil?", 1, 1, f_nil_p));
-  obarray_put (o, DEFSUBR ("eval-noexpand", 1, 1, f_eval_noexpand));
-  obarray_put (o, DEFSUBR ("apply", 2, 2, f_apply));
+  // the machine recognizes these subr objects in step_apply
+  fq_eval_noexpand
+      = unbox_symbol (
+            obarray_put (o, DEFSUBR ("eval-noexpand", 1, 1, f_eval_noexpand)))
+            ->value;
+  fq_apply = unbox_symbol (obarray_put (o, DEFSUBR ("apply", 2, 2, f_apply)))
+                 ->value;
   obarray_put (o, DEFSUBR ("assoc", 2, 2, f_assoc));
   obarray_put (o, DEFSUBR ("assq", 2, 2, f_assq));
   obarray_put (o, DEFSUBR ("rassoc", 2, 2, f_rassoc));
@@ -1354,7 +1370,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("<=", 2, 2, f_leq));
   obarray_put (o, DEFSUBR ("defined?", 1, 1, f_defined_p));
   obarray_put (o, DEFSUBR ("format", 2, MANY, f_format));
-  obarray_put (o, DEFSUBR ("read", 1, 1, f_read));
+  q_read = obarray_put (o, DEFSUBR ("read", 1, 1, f_read));
   obarray_put (o, DEFSUBR ("signal", 1, 2, f_signal));
   obarray_put (o, DEFSUBR ("error-symbol", 1, 1, f_error_symbol));
   obarray_put (o, DEFSUBR ("error-backtrace", 1, 1, f_error_backtrace));

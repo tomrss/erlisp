@@ -7,17 +7,47 @@
 #define STACKMAXPAGES 8
 #define STACKSIZE (STACKMAXPAGES * STACKPAGESIZE)
 
+enum stackframe_kind
+{
+  F_HALT = 0,
+  F_SEQ,  // sequence of operations (progn/begin)
+  F_ARGS, // args of fun application
+  F_IF,
+  F_DEFINE,
+  F_SETQ,
+  F_CONDITION_CASE,
+  F_UNWIND_PROTECT,
+  F_RERAISE, // re-raise error after a temporary stop in the stack
+  F_RESTORE, // restore value
+};
+
 struct stackframe
 {
-  const char *fname;
+  enum stackframe_kind kind;
   Lisp_Object env;
-  // code in evaluation for protecting it from gc
-  Lisp_Object form;
-  Lisp_Object *argvals;
-  int nargs;
-  // unwind protect
-  Lisp_Object cleanups;
-  Lisp_Object keepalive; // simple slot for preserving somehting from gc
+  // clang-format off
+
+  // NOTE: this union is just for the sake of clarity in intent,
+  // sacrificing some lines of code. we could have used just 2 unnamed
+  // slots and interpret them differently based on kind. i think this
+  // is more clear to express what we want to hold in those registers
+  // without browsing more code
+  union
+  {
+    struct { Lisp_Object rest;             } seq;
+    struct { Lisp_Object argl, unev;       } args;
+    struct { Lisp_Object body;             } if_;
+    struct { Lisp_Object symbol;           } define;
+    struct { Lisp_Object symbol;           } setq;
+    struct { Lisp_Object handlers, errsym; } conditioncase;
+    struct { Lisp_Object cleanups;         } unwindprotect;
+    struct { Lisp_Object val;              } restore;
+    struct { Lisp_Object err;              } reraise;
+
+    // option for reading named slots regardless of kind
+    Lisp_Object slots[2];
+  };
+  // clang-format on
 };
 
 struct stackpage
@@ -33,15 +63,22 @@ struct stack
   struct stackpage *pages;
 };
 
-void stack_init (Lisp_Object baseenv);
+void stack_init ();
 void stack_push (struct stackframe sf);
+void stack_push_halt (Lisp_Object env);
+void stack_push_seq (Lisp_Object env, Lisp_Object rest);
+void stack_push_args (Lisp_Object env, Lisp_Object argl, Lisp_Object unev);
+void stack_push_if (Lisp_Object env, Lisp_Object body);
+void stack_push_define (Lisp_Object env, Lisp_Object symbol);
+void stack_push_setq (Lisp_Object env, Lisp_Object symbol);
+void stack_push_conditioncase (Lisp_Object env, Lisp_Object errsym,
+                               Lisp_Object handlers);
+void stack_push_unwindprotect (Lisp_Object env, Lisp_Object cleanups);
+void stack_push_restore (Lisp_Object env, Lisp_Object val);
+void stack_push_reraise (Lisp_Object env, Lisp_Object err);
 struct stackframe stack_pop ();
-struct stackframe stack_current ();
-struct stackframe *stack_current_ref (); // TODO not a big fan of this...
 size_t stack_depth_current ();
-void stack_current_set_env (Lisp_Object env);
 void stack_walk (void (*fun) (struct stackframe));
-void stack_unwind (int depthfrom, void (*fun) (struct stackframe * ));
 Lisp_Object stack_backtrace (int depthfrom);
 
 #endif /* STACK_H */
