@@ -3,6 +3,7 @@
 #include "error.h"
 #include "eval.h"
 #include "lisp.h"
+#include "port.h"
 #include "print.h"
 #include "stack.h"
 

@@ -1,27 +1,11 @@
 #include "print.h"
 #include "lisp.h"
+#include "port.h"
 #include "stack.h"
 #include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdio.h>
-
-static int
-stderr_port_put_char (int c, Lisp_Port *p)
-{
-  return fputc (c, p->backend.file);
-}
-
-// used by print_error. not in the heap and never boxed: it works without
-// memory and before init, the gc doesn't see it and lisp can't reach it
-static Lisp_Port stderr_port = {
-  .header = { .type = LISP_PORT },
-  .direction = PORT_OUT,
-  .type = PORT_FILE,
-  .current = PORT_NOPEEK,
-  .closed = 0,
-  .put_char = &stderr_port_put_char,
-};
 
 void
 port_printf (Lisp_Port *p, const char *fmt, ...)
@@ -169,7 +153,7 @@ fprint_form (Lisp_Port *p, Lisp_Object form, int display)
     case LISP_PORT:
       port_printf (p, "[port,%s,%s%s]",
                    unbox_port (form)->direction == PORT_IN ? "in" : "out",
-                   unbox_port (form)->type == PORT_FILE ? "file" : "string",
+                   port_type_name (unbox_port (form)),
                    unbox_port (form)->closed ? ",closed" : "");
       break;
     case LISP_SUBR:
@@ -212,9 +196,7 @@ fprint_form (Lisp_Port *p, Lisp_Object form, int display)
 void
 print_error (Lisp_Object err)
 {
-  Lisp_Port *p = &stderr_port;
-  // stderr is not a constant, it can't go in the static initializer
-  p->backend.file = stderr;
+  Lisp_Port *p = port_stderr ();
 
   fprint_form (p, f_error_symbol (err), 0);
   port_write_string (":", p);

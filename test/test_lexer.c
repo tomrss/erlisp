@@ -1,6 +1,7 @@
 #include "test_lexer.h"
 #include "../src/alloc.h"
 #include "../src/lexer.h"
+#include "../src/port.h"
 #include "test_lib.h"
 #include <math.h>
 #include <stdarg.h>

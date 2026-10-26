@@ -6,17 +6,14 @@
 #include "lisp.h"
 #include "obarray.h"
 #include "parser.h"
+#include "port.h"
 #include "prelude.h"
 #include "print.h"
 #include "stack.h"
 #include <alloca.h>
-#include <arpa/inet.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <unistd.h>
 
 Lisp_Object q_nil;
 Lisp_Object q_t;
@@ -974,66 +971,7 @@ Lisp_Object
 f_get_output_string (Lisp_Object port)
 {
   check_type (port, LISP_PORT);
-  Lisp_Port *p = unbox_port (port);
-  if (p->type != PORT_STRING)
-    invalidporttype_error (port, PORT_STRING);
-  if (p->direction != PORT_OUT)
-    invalidportdir_error (port, PORT_OUT);
-  if (p->closed)
-    closedport_error (port);
-
-  // this will copy the buf
-  return make_nstring (p->backend.string.data, p->backend.string.pos);
-}
-
-static inline void
-snprintf_addr (struct sockaddr *addr, char *buf, size_t size)
-{
-  char ip6[INET6_ADDRSTRLEN]; // ip4 will fit here
-  struct sockaddr_in *addr_in;
-  struct sockaddr_in6 *addr_in6;
-  struct sockaddr_un *addr_un;
-
-  switch (addr->sa_family)
-    {
-    case AF_INET:
-      addr_in = (struct sockaddr_in *)addr;
-      inet_ntop (AF_INET, &addr_in->sin_addr, ip6, sizeof (ip6));
-      snprintf (buf, size, "%s:%d", ip6, ntohs (addr_in->sin_port));
-      break;
-    case AF_INET6:
-      addr_in6 = (struct sockaddr_in6 *)addr;
-      inet_ntop (AF_INET6, &addr_in6->sin6_addr, ip6, sizeof (ip6));
-      snprintf (buf, size, "[%s]:%d", ip6, ntohs (addr_in6->sin6_port));
-      break;
-    case AF_UNIX:
-      addr_un = (struct sockaddr_un *)addr;
-      snprintf (buf, size, "%s", addr_un->sun_path);
-      break;
-    default:
-      snprintf (buf, size, "[unknown socket type");
-    }
-}
-
-static inline Lisp_Object
-connect_socket (int fd, struct sockaddr *addr, socklen_t len)
-{
-  if (connect (fd, addr, len) < 0)
-    {
-      int err = errno;
-      close (fd);
-      char buf[256] = { 0 };
-      snprintf_addr (addr, buf, sizeof (buf));
-      portio_error (buf, err);
-    }
-
-  // we open a couple of FILEs that target the same socket underneath.
-  // this is because r+ file on socket is not doable. this will be ditched once
-  // we have non-blocking sockets
-  FILE *in = fdopen (fd, "r");
-  FILE *out = fdopen (dup (fd), "w");
-
-  return f_cons (make_file_port (in, PORT_IN), make_file_port (out, PORT_OUT));
+  return port_get_output_string (unbox_port (port));
 }
 
 Lisp_Object
@@ -1046,111 +984,14 @@ f_tcp_connect (Lisp_Object host, Lisp_Object port)
     f_signal (q_error, f_cons (make_string ("port out of range"),
                                f_cons (port, q_nil)));
 
-  int fd = socket (AF_INET, SOCK_STREAM, 0);
-  if (fd < 0)
-    portio_error ("tcp-socket", errno);
-
-  struct sockaddr_in addr;
-  memset (&addr, 0, sizeof addr);
-  addr.sin_family = AF_INET;
-  addr.sin_port = htons (unbox_int (port));
-  if (inet_pton (AF_INET, unbox_string (host)->data, &addr.sin_addr) < 1)
-    {
-      close (fd);
-      f_signal (q_error_portio, f_cons (host, f_cons (port, q_nil)));
-    }
-
-  return connect_socket (fd, (struct sockaddr *)&addr,
-                         sizeof (struct sockaddr_in));
+  return tcp_connect (unbox_string (host)->data, unbox_int (port));
 }
 
 Lisp_Object
 f_unix_connect (Lisp_Object path)
 {
   check_type (path, LISP_STRG);
-
-  int fd = socket (AF_UNIX, SOCK_STREAM, 0);
-  if (fd < 0)
-    portio_error ("unix-socket", errno);
-
-  struct sockaddr_un addr;
-  memset (&addr, 0, sizeof addr);
-  addr.sun_family = AF_UNIX;
-  strncpy (addr.sun_path, unbox_string (path)->data, sizeof addr.sun_path - 1);
-
-  return connect_socket (fd, (struct sockaddr *)&addr,
-                         sizeof (struct sockaddr_un));
-}
-
-int
-port_read_char (Lisp_Port *p)
-{
-  if (p->closed)
-    closedport_error (box_port (p));
-
-  if (p->current != PORT_NOPEEK)
-    {
-      int res = p->current;
-      p->current = PORT_NOPEEK;
-      return res;
-    }
-
-  return p->get_char (p);
-}
-
-int
-port_peek_char (Lisp_Port *p)
-{
-  if (p->closed)
-    closedport_error (box_port (p));
-
-  if (p->current != PORT_NOPEEK)
-    return p->current;
-
-  int c = p->get_char (p);
-  p->current = c;
-  return c;
-}
-
-static inline int
-port_unsafe_write_char (int c, Lisp_Port *p)
-{
-  int w = p->put_char (c, p);
-  if (w == EOF)
-    // TODO this is not a file error
-    file_error (make_string ("error writing to output port"));
-  return w;
-}
-
-int
-port_write_char (int c, Lisp_Port *p)
-{
-  if (p->closed)
-    closedport_error (box_port (p));
-
-  return port_unsafe_write_char (c, p);
-}
-
-void
-port_write_nstring (const char *string, size_t size, Lisp_Port *p)
-{
-  if (p->closed)
-    closedport_error (box_port (p));
-
-  for (size_t i = 0; i < size; i++)
-    port_unsafe_write_char (string[i], p);
-}
-
-void
-port_write_string (const char *string, Lisp_Port *p)
-{
-  if (p->closed)
-    closedport_error (box_port (p));
-
-  int i = 0;
-  char c;
-  while ((c = string[i++]) != '\0')
-    port_unsafe_write_char (c, p);
+  return unix_connect (unbox_string (path)->data);
 }
 
 Lisp_Object
@@ -1158,7 +999,7 @@ f_close_port (Lisp_Object port)
 {
   check_type (port, LISP_PORT);
   Lisp_Port *p = unbox_port (port);
-  return BOOL (p->close (p));
+  return BOOL (port_close (p));
 }
 
 Lisp_Object
@@ -1224,8 +1065,7 @@ f_flush_output_port (Lisp_Object port)
   if (p->closed)
     closedport_error (port);
 
-  if (p->type == PORT_FILE)
-    fflush (p->backend.file);
+  port_flush (p);
   return q_nil;
 }
 

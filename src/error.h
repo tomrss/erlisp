@@ -92,53 +92,6 @@ invalidfunc_error (Lisp_Object invalidfunc)
   f_signal (q_error_funcinvalid, f_cons (invalidfunc, q_nil));
 }
 
-static inline const char *
-port_type_name (Lisp_Port_Type t)
-{
-  switch (t)
-    {
-    case PORT_FILE:
-      return "PORT_FILE";
-    case PORT_STRING:
-      return "PORT_STRING";
-    }
-  return "UNKNONW";
-}
-
-static inline const char *
-port_direction_name (Lisp_Port_Direction d)
-{
-  switch (d)
-    {
-    case PORT_IN:
-      return "PORT_IN";
-    case PORT_OUT:
-      return "PORT_OUT";
-    default:
-      return "UNKNONW";
-    }
-}
-
-NORETURN static inline void
-invalidporttype_error (Lisp_Object port, Lisp_Port_Type expected)
-{
-  Lisp_Object data = f_cons (make_string (port_type_name (expected)), q_nil);
-  data = f_cons (make_string (port_type_name (unbox_port (port)->type)), data);
-
-  f_signal (q_error_portinvalid, data);
-}
-
-NORETURN static inline void
-invalidportdir_error (Lisp_Object port, Lisp_Port_Direction expected)
-{
-  Lisp_Object data
-      = f_cons (make_string (port_direction_name (expected)), q_nil);
-  data = f_cons (
-      make_string (port_direction_name (unbox_port (port)->direction)), data);
-
-  f_signal (q_error_portinvalid, data);
-}
-
 NORETURN static inline void
 closedport_error (Lisp_Object port)
 {

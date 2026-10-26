@@ -1,5 +1,6 @@
 #include "lexer.h"
 #include "lisp.h"
+#include "port.h"
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>

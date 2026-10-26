@@ -7,6 +7,7 @@
 #include "eval.h"
 #include "lisp.h"
 #include "loballoc.h"
+#include "port.h"
 #include "print.h"
 #include "stack.h"
 #include <stddef.h>
@@ -72,7 +73,7 @@ static int
 finalize_port (void *portptr)
 {
   Lisp_Port *p = (Lisp_Port *)portptr;
-  return p->close (p);
+  return port_close (p);
 }
 
 void
@@ -138,7 +139,7 @@ make_vector (size_t size)
   return box_vector (vec);
 }
 
-static inline Lisp_Port *
+Lisp_Port *
 make_uninit_port ()
 {
   Lisp_Port *p = heapblkalloc (heap->ports);
@@ -146,120 +147,6 @@ make_uninit_port ()
   p->current = PORT_NOPEEK;
   p->closed = 0;
   return p;
-}
-
-// TODO why this port specific code in allocator????
-
-static int
-file_port_get_char (Lisp_Port *p)
-{
-  return fgetc (p->backend.file);
-}
-
-static int
-string_port_get_char (Lisp_Port *p)
-{
-  if (p->backend.string.pos >= p->backend.string.size)
-    return EOF;
-  return (unsigned char)p->backend.string.data[p->backend.string.pos++];
-}
-
-static int
-file_port_put_char (int c, Lisp_Port *p)
-{
-  return fputc (c, p->backend.file);
-}
-
-static int
-string_port_put_char (int c, Lisp_Port *p)
-{
-  if (c == EOF)
-    return EOF;
-  if (p->backend.string.pos >= p->backend.string.size)
-    {
-      // not enough space, expand buffer
-      size_t incr = 1024; // TODO not here
-      p->backend.string.size += incr;
-      char *buf = realloc (p->backend.string.data, p->backend.string.size);
-      if (buf == NULL)
-        // todo this is bad!
-        f_signal (q_error, f_cons (make_string ("not enough memory"), q_nil));
-      p->backend.string.data = buf;
-    }
-
-  p->backend.string.data[p->backend.string.pos++] = c;
-  return c;
-}
-
-static int
-file_port_close (Lisp_Port *p)
-{
-  if (p->closed)
-    return 0;
-  fclose (p->backend.file);
-  p->closed = 1;
-  return 1;
-}
-
-static int
-string_port_close (Lisp_Port *p)
-{
-  if (p->closed)
-    return 0;
-  free (p->backend.string.data);
-  p->closed = 1;
-  return 1;
-}
-
-Lisp_Object
-make_file_port (FILE *f, Lisp_Port_Direction direction)
-{
-  Lisp_Port *p = make_uninit_port ();
-  p->direction = direction;
-  p->type = PORT_FILE;
-  p->backend.file = f;
-  p->get_char = &file_port_get_char;
-  p->put_char = &file_port_put_char;
-  p->close = &file_port_close;
-  return box_port (p);
-}
-
-Lisp_Object
-make_input_string_port (Lisp_Object string)
-{
-  Lisp_Port *p = make_uninit_port ();
-  p->direction = PORT_IN;
-  p->type = PORT_STRING;
-  // TODO this is tmp: we are copying but we shouldn't. Why? gc will
-  // free the input string.  probably the correct thing to do would be
-  // to keep the Lisp_Object string and gc mark it with the port.
-  p->backend.string.data = malloc (unbox_string (string)->size);
-  memcpy (p->backend.string.data, unbox_string (string)->data,
-          unbox_string (string)->size);
-
-  p->backend.string.size = unbox_string (string)->size;
-  p->backend.string.pos = 0;
-  p->get_char = &string_port_get_char;
-  p->put_char = &string_port_put_char;
-  p->close = &string_port_close;
-  return box_port (p);
-}
-
-Lisp_Object
-make_output_string_port ()
-{
-  size_t incr = 1024; // TODO not here
-
-  Lisp_Port *p = make_uninit_port ();
-  p->direction = PORT_OUT;
-  p->type = PORT_STRING;
-  p->backend.string.data = malloc (incr);
-  p->backend.string.size = incr;
-  p->backend.string.pos = 0;
-  p->get_char = &string_port_get_char;
-  p->put_char = &string_port_put_char;
-  p->close = &string_port_close;
-  return box_port (p);
 }
 
 Lisp_Object

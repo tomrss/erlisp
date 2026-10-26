@@ -5,6 +5,7 @@
 #include "../src/lisp.h"
 #include "../src/obarray.h"
 #include "../src/parser.h"
+#include "../src/port.h"
 #include "test_lib.h"
 #include <stdio.h>
 #include <string.h>

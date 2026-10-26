@@ -9,6 +9,7 @@
 #include "test_lexer.h"
 #include "test_lisp.h"
 #include "test_obarray.h"
+#include "test_port.h"
 #include <stdio.h>
 
 int
@@ -39,6 +40,7 @@ main (int argc, char **argv)
   test_execution_add (te, test_suite_eval ());
   test_execution_add (te, test_suite_builtins ());
   test_execution_add (te, test_suite_env ());
+  test_execution_add (te, test_suite_port ());
   // TODO test_execution_add (te, test_suite_blkalloc ());
 
   // execute

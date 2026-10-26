@@ -21,9 +21,6 @@
 #define MANY 999
 #define SPECIAL 998
 
-// value of lisp_port current when nothing was peeked, must differ from EOF
-#define PORT_NOPEEK -2
-
 #define ERRTYPE(expected, got)                                                \
   fprintf (stderr, "type error. expected %s, got %s", type_name (expected),   \
            type_name (got));                                                  \
@@ -84,18 +81,6 @@ typedef enum
   LISP_PORT,
   LISP_CONT,
 } Lisp_Type;
-
-typedef enum
-{
-  PORT_IN,
-  PORT_OUT,
-} Lisp_Port_Direction;
-
-typedef enum
-{
-  PORT_FILE,
-  PORT_STRING,
-} Lisp_Port_Type;
 
 // TODO use GMP for arbitrary big integers
 typedef int64_t Lisp_Integer;
@@ -233,28 +218,7 @@ struct lisp_vector
   Lisp_Object contents[];
 };
 
-struct lisp_port
-{
-  struct lisp_cplx_header header;
-  Lisp_Port_Direction direction;
-  Lisp_Port_Type type;
-  union
-  {
-    FILE *file;
-    struct
-    {
-      char *data;
-      size_t size;
-      size_t pos;
-    } string;
-  } backend;
-  int current; // peeked char or EOF, PORT_NOPEEK if nothing was peeked
-  int closed;  // bool
-  int (*get_char) (struct lisp_port *p);
-  int (*put_char) (int c, struct lisp_port *p);
-  int (*close) (struct lisp_port *p);
-};
-
+struct lisp_port;         // forward declaration, defined in port.h
 struct lisp_continuation; // forward declaration, depends on stack
 
 /* Conversion from/to boxed Lisp_Object to/from explicit types */
@@ -599,14 +563,6 @@ extern Lisp_Object p_current_output_port;
 extern Lisp_Object l_globalenv;
 
 void init_builtins ();
-
-// internal functions
-
-int port_read_char (Lisp_Port *p);
-int port_peek_char (Lisp_Port *p);
-int port_write_char (int c, Lisp_Port *p);
-void port_write_nstring (const char *string, size_t size, Lisp_Port *p);
-void port_write_string (const char *string, Lisp_Port *p);
 
 // inlined helpers
 
