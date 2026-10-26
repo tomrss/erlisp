@@ -2,6 +2,7 @@
 #include "error.h"
 #include "lisp.h"
 #include <stddef.h>
+#include <string.h>
 
 static struct stackpage *
 page_new (struct stack *s)
@@ -24,6 +25,19 @@ stack_init ()
   s->pages = NULL;
   page_new (s);
   return s;
+}
+
+void
+stack_free (struct stack *s)
+{
+  struct stackpage *p = s->pages;
+  while (p != NULL)
+    {
+      struct stackpage *old = p;
+      p = p->next;
+      free (old);
+    }
+  free (s);
 }
 
 void
@@ -64,7 +78,8 @@ stack_push_seq (struct stack *s, Lisp_Object env, Lisp_Object rest)
 }
 
 void
-stack_push_args (struct stack *s, Lisp_Object env, Lisp_Object argl, Lisp_Object unev)
+stack_push_args (struct stack *s, Lisp_Object env, Lisp_Object argl,
+                 Lisp_Object unev)
 {
   struct stackframe sf = {
     .kind = F_ARGS,
@@ -123,14 +138,14 @@ stack_push_conditioncase (struct stack *s, Lisp_Object env, Lisp_Object errsym,
 }
 
 void
-stack_push_unwindprotect (struct stack *s, Lisp_Object env, Lisp_Object cleanups)
+stack_push_unwindprotect (struct stack *s, Lisp_Object env,
+                          Lisp_Object cleanups, Lisp_Object token)
 {
   struct stackframe sf = {
     .kind = F_UNWIND_PROTECT,
     .env = env,
-    .unwindprotect = { .cleanups = cleanups },
+    .unwindprotect = { .cleanups = cleanups, .token = token },
   };
-  sf.slots[1] = q_nil;
   stack_push (s, sf);
 }
 
@@ -155,6 +170,18 @@ stack_push_reraise (struct stack *s, Lisp_Object env, Lisp_Object err)
     .reraise = { .err = err },
   };
   sf.slots[1] = q_nil;
+  stack_push (s, sf);
+}
+
+void
+stack_push_recont (struct stack *s, Lisp_Object env, Lisp_Object cont,
+                   Lisp_Object v)
+{
+  struct stackframe sf = {
+    .kind = F_RECONT,
+    .env = env,
+    .recont = { .cont = cont, .v = v },
+  };
   stack_push (s, sf);
 }
 
@@ -220,4 +247,49 @@ stack_backtrace (UNUSED struct stack *s, UNUSED int depthfrom)
   /*   } */
 
   return backtrace;
+}
+
+size_t
+stack_depth (struct stack *s)
+{
+  return (s->numpages - 1) * STACKPAGESIZE + s->pages->depth;
+}
+
+void
+stack_snapshot (struct stack *s, struct stackframe *dst)
+{
+  size_t offset = (s->numpages - 1) * STACKPAGESIZE;
+  struct stackpage *p = s->pages;
+  while (p != NULL)
+    {
+      memcpy (dst + offset, p->frames, p->depth * sizeof (struct stackframe));
+      offset -= STACKPAGESIZE;
+      p = p->next;
+    }
+}
+
+struct stack *
+stack_snapshot_restore (size_t size, struct stackframe *src)
+{
+  struct stack *s = malloc (sizeof (struct stack));
+  // TODO check malloc
+  s->numpages = 0;
+  s->pages = NULL;
+
+  for (size_t offset = 0; offset < size; offset += STACKPAGESIZE)
+    {
+      struct stackpage *p = malloc (sizeof (struct stackpage));
+      size_t depth = size - offset;
+      if (depth > STACKPAGESIZE)
+        depth = STACKPAGESIZE;
+      p->depth = depth;
+      memcpy (p->frames, src + offset, depth * sizeof (struct stackframe));
+
+      p->next = s->pages;
+      s->pages = p;
+
+      s->numpages++;
+    }
+
+  return s;
 }

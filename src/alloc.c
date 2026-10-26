@@ -263,7 +263,7 @@ make_output_string_port ()
 }
 
 Lisp_Object
-make_continuation (size_t size)
+make_uninit_continuation (size_t size)
 {
   size_t allocsize
       = sizeof (Lisp_Continuation) + size * sizeof (struct stackframe);
@@ -465,6 +465,14 @@ gc ()
 }
 
 static void
+gcmarkstackframe (struct stackframe sf)
+{
+  gcmarkobj (sf.env);
+  gcmarkobj (sf.slots[0]);
+  gcmarkobj (sf.slots[1]);
+}
+
+static void
 gcmarkobj (Lisp_Object obj)
 {
   switch (type_of (obj))
@@ -531,21 +539,21 @@ gcmarkobj (Lisp_Object obj)
     case LISP_PORT:
       blkgcmark (heap->ports, unbox_port (obj));
       break;
+    case LISP_CONT:
+      {
+        Lisp_Continuation *cont = unbox_continuation (obj);
+        if (!lobgcmark (heap->lobs, cont))
+          break;
+        for (size_t i = 0; i < cont->size; i++)
+          gcmarkstackframe (cont->stacksnap[i]);
+      }
+      break;
     case LISP_INTG:
     case LISP_CHAR:
     case LISP_FLOT:
     case LISP_SUBR:
-    case LISP_CONT:
       break;
     }
-}
-
-static void
-gcmarkstackframe (struct stackframe sf)
-{
-  gcmarkobj (sf.env);
-  gcmarkobj (sf.slots[0]);
-  gcmarkobj (sf.slots[1]);
 }
 
 static void

@@ -157,6 +157,14 @@ static TestResult test_builtins_lambda_rest ();
 static TestResult test_builtins_define_rest ();
 static TestResult test_builtins_defmacro_rest ();
 static TestResult test_builtins_lambda_rest_error ();
+static TestResult test_builtins_callcc ();
+static TestResult test_builtins_callcc_reentry ();
+static TestResult test_builtins_callcc_args ();
+static TestResult test_builtins_callcc_unwind_protect ();
+static TestResult test_builtins_callcc_unwind_protect_lateral ();
+static TestResult test_builtins_callcc_cleanup_error ();
+static TestResult test_builtins_callcc_condition_case ();
+static TestResult test_builtins_callcc_gc ();
 
 static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "car cdr", .run = test_builtins_car_cdr },
@@ -238,6 +246,14 @@ static TestCase test_builtins_cases[] = {
   { .skip = 0, .name = "def rest", .run = test_builtins_define_rest },
   { .skip = 0, .name = "defmacro rest", .run = test_builtins_defmacro_rest },
   { .skip = 0, .name = "lambda rest error", .run = test_builtins_lambda_rest_error },
+  { .skip = 0, .name = "call/cc", .run = test_builtins_callcc },
+  { .skip = 0, .name = "call/cc reentry", .run = test_builtins_callcc_reentry },
+  { .skip = 0, .name = "call/cc args", .run = test_builtins_callcc_args },
+  { .skip = 0, .name = "call/cc unw-prot", .run = test_builtins_callcc_unwind_protect },
+  { .skip = 0, .name = "call/cc unw-prot lat", .run = test_builtins_callcc_unwind_protect_lateral },
+  { .skip = 0, .name = "call/cc cleanup err", .run = test_builtins_callcc_cleanup_error },
+  { .skip = 0, .name = "call/cc cond-case", .run = test_builtins_callcc_condition_case },
+  { .skip = 0, .name = "call/cc gc", .run = test_builtins_callcc_gc },
   {}, // terminator
 };
 
@@ -1879,5 +1895,244 @@ test_builtins_lambda_rest_error ()
   EXPECT_ERROR ("(define (def-rest-bad a . 1) a)", q_error_type);
   // the required args too
   EXPECT_ERROR ("(lambda (a 1 . r) a)", q_error_type);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_callcc ()
+{
+  // k not invoked: the value is the one of the function
+  EXPECT_INT ("(call/cc (lambda (k) 42))", 42);
+  EXPECT_INT ("(call-with-current-continuation (lambda (k) (k 7)))", 7);
+
+  // escape: the rest of the body is skipped
+  EXPECT_INT ("(+ 1 (call/cc (lambda (k) (+ 10 (k 41)))))", 42);
+
+  // escape from inside a function called by map
+  EXPECT_INT ("(call/cc (lambda (k)"
+              "  (map (lambda (x) (if (= x 3) (k x) x)) '(1 2 3 4))))",
+              3);
+
+  // escape from a deep recursion, over more than one stack page
+  EXPECT_NO_ERROR_SRC ("(define (k-deep n k)"
+                       "  (if (= n 0) (k 'done) (+ 1 (k-deep (- n 1) k))))");
+  EXPECT_FORM ("(call/cc (lambda (k) (k-deep 1500 k)))", "done");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_callcc_reentry ()
+{
+  // k is invoked after call/cc returned: the rest of the body runs again
+  EXPECT_INT ("(let ((n 0) (k nil))"
+              "  (call/cc (lambda (c) (set! k c)))"
+              "  (set! n (+ n 1))"
+              "  (if (< n 5) (k nil) n))",
+              5);
+
+  // multi-shot: the same k is invoked more times, each from a fresh copy
+  // of the snapshot. it is captured deep, over more than one stack page
+  EXPECT_NO_ERROR_SRC ("(define k-k nil)");
+  EXPECT_NO_ERROR_SRC ("(define (k-down n)"
+                       "  (if (= n 0)"
+                       "      (call/cc (lambda (k) (set! k-k k) 0))"
+                       "      (+ 1 (k-down (- n 1)))))");
+  EXPECT_INT ("(let ((r (k-down 1500)))"
+              "  (if (< r 1700) (k-k (+ (- r 1500) 100)) r))",
+              1700);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_callcc_args ()
+{
+  // a continuation takes exactly one arg
+  EXPECT_ERROR ("(call/cc (lambda (k) (k)))", q_error_funcargs);
+  EXPECT_ERROR ("(call/cc (lambda (k) (k 1 2)))", q_error_funcargs);
+
+  // call/cc takes a function of one arg
+  EXPECT_ERROR ("(call/cc)", q_error_funcargs);
+  EXPECT_ERROR ("(call/cc 1)", q_error_funcinvalid);
+  EXPECT_ERROR ("(call/cc (lambda () 1))", q_error_funcargs);
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_callcc_unwind_protect ()
+{
+  // escape out of an unwind-protect: the cleanups run, the rest of the
+  // body does not
+  EXPECT_NO_ERROR_SRC ("(define k-log nil)");
+  EXPECT_INT ("(call/cc (lambda (k)"
+              "  (unwind-protect"
+              "      (progn (k 1) (set! k-log (cons 'body k-log)))"
+              "    (set! k-log (cons 'c k-log)))))",
+              1);
+  EXPECT_FORM ("k-log", "(c)");
+
+  // nested unwind-protects: from the innermost
+  EXPECT_NO_ERROR_SRC ("(define k-log nil)");
+  EXPECT_INT ("(call/cc (lambda (k)"
+              "  (unwind-protect"
+              "      (unwind-protect (k 1)"
+              "        (set! k-log (cons 'inner k-log)))"
+              "    (set! k-log (cons 'outer k-log)))))",
+              1);
+  EXPECT_FORM ("k-log", "(outer inner)");
+
+  // through function calls, each cleanup with the locals of its own env
+  EXPECT_NO_ERROR_SRC ("(define k-log nil)");
+  EXPECT_NO_ERROR_SRC ("(define (k-up x k)"
+                       "  (unwind-protect (k x)"
+                       "    (set! k-log (cons x k-log))))");
+  EXPECT_INT ("(call/cc (lambda (k)"
+              "  (let ((y 1))"
+              "    (unwind-protect (k-up 2 k)"
+              "      (set! k-log (cons y k-log))))))",
+              2);
+  EXPECT_FORM ("k-log", "(1 2)");
+
+  // k captured inside the unwind-protect: jumping does not exit it, the
+  // cleanups run once, at its normal exit
+  EXPECT_NO_ERROR_SRC ("(define k-log nil)");
+  EXPECT_INT ("(unwind-protect (+ 1 (call/cc (lambda (k) (k 1))))"
+              "  (set! k-log (cons 'c k-log)))",
+              2);
+  EXPECT_FORM ("k-log", "(c)");
+
+  // k captured inside the outer unwind-protect, invoked inside the inner
+  // one: the jump runs only the inner cleanups
+  EXPECT_NO_ERROR_SRC ("(define k-log nil)");
+  EXPECT_INT ("(unwind-protect"
+              "    (progn"
+              "      (call/cc (lambda (k)"
+              "        (unwind-protect (k 5)"
+              "          (set! k-log (cons 'inner k-log)))))"
+              "      (set! k-log (cons 'after k-log))"
+              "      5)"
+              "  (set! k-log (cons 'outer k-log)))",
+              5);
+  EXPECT_FORM ("k-log", "(outer after inner)");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_callcc_unwind_protect_lateral ()
+{
+  // k captured in a context that already returned, invoked inside an
+  // unwind-protect entered later: the jump abandons it, the cleanups run.
+  // k is captured deeper than the unwind-protect
+  EXPECT_NO_ERROR_SRC ("(define k-log nil)");
+  EXPECT_NO_ERROR_SRC ("(define k-k nil)");
+  EXPECT_NO_ERROR_SRC ("(define k-first t)");
+  EXPECT_FORM ("(progn"
+               "  (list 1 (list 2 (list 3 (list 4"
+               "    (call/cc (lambda (k) (set! k-k k) 0))))))"
+               "  (unwind-protect"
+               "      (if k-first (progn (set! k-first nil) (k-k 0)) 'end)"
+               "    (set! k-log (cons 'c k-log))))",
+               "end");
+  // once at the jump, once at the normal exit of the second time
+  EXPECT_FORM ("k-log", "(c c)");
+
+  // jumping back into an unwind-protect already exited does not run its
+  // cleanups: they run again only at its next exit
+  EXPECT_NO_ERROR_SRC ("(define k-log nil)");
+  EXPECT_NO_ERROR_SRC ("(define k-first t)");
+  EXPECT_FORM ("(progn"
+               "  (unwind-protect"
+               "      (call/cc (lambda (k) (set! k-k k) 0))"
+               "    (set! k-log (cons 'c k-log)))"
+               "  (set! k-log (cons 'between k-log))"
+               "  (if k-first (progn (set! k-first nil) (k-k 1)) 'end))",
+               "end");
+  EXPECT_FORM ("k-log", "(between c between c)");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_callcc_cleanup_error ()
+{
+  Lisp_Object boom = f_intern (make_string ("k-boom"));
+
+  // an error in a cleanup aborts the jump: the rest of that cleanup is
+  // skipped, the outer cleanups still run
+  EXPECT_NO_ERROR_SRC ("(define k-log nil)");
+  EXPECT_ERROR ("(call/cc (lambda (k)"
+                "  (unwind-protect"
+                "      (unwind-protect (k 1)"
+                "        (set! k-log (cons 'c1 k-log))"
+                "        (signal 'k-boom)"
+                "        (set! k-log (cons 'c1-rest k-log)))"
+                "    (set! k-log (cons 'c2 k-log)))))",
+                boom);
+  EXPECT_FORM ("k-log", "(c2 c1)");
+
+  // the cleanups run before leaving the stack: the error is caught by the
+  // handler around the unwind-protect, not by the ones in k
+  EXPECT_FORM ("(condition-case e"
+               "    (call/cc (lambda (k)"
+               "      (condition-case e"
+               "          (unwind-protect (k 'jumped) (signal 'k-boom))"
+               "        (k-boom 'inner))))"
+               "  (k-boom 'outer))",
+               "inner");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_callcc_condition_case ()
+{
+  // escape out of a condition-case: its handlers are no more active
+  EXPECT_FORM ("(condition-case e"
+               "    (progn"
+               "      (call/cc (lambda (k)"
+               "        (condition-case e (k 1) (k-boom 'inner))))"
+               "      (signal 'k-boom))"
+               "  (k-boom 'outer))",
+               "outer");
+
+  // k captured inside a condition-case: its handlers are active again
+  // after the jump
+  EXPECT_NO_ERROR_SRC ("(define k-first t)");
+  EXPECT_FORM ("(let ((k nil))"
+               "  (condition-case e"
+               "      (progn"
+               "        (call/cc (lambda (c) (set! k c)))"
+               "        (if k-first nil (signal 'k-boom)))"
+               "    (k-boom 'caught))"
+               "  (if k-first (progn (set! k-first nil) (k nil)) 'end))",
+               "end");
+  return TEST_RESULT_SUCCESS;
+}
+
+static TestResult
+test_builtins_callcc_gc ()
+{
+  // the conses allocated after the gc try to reuse the blocks of what was
+  // wrongly freed
+
+  // the args already evaluated live only in the snapshot of k: (7 8) is
+  // reachable only from there when the gc runs
+  EXPECT_NO_ERROR_SRC ("(define k-k nil)");
+  EXPECT_NO_ERROR_SRC ("(define k-v nil)");
+  EXPECT_NO_ERROR_SRC ("(define k-first t)");
+  EXPECT_FORM ("(progn"
+               "  (set! k-v (list (list 7 8)"
+               "                  (call/cc (lambda (k) (set! k-k k) 0))))"
+               "  (if k-first"
+               "      (progn (set! k-first nil) (set! k-v nil)"
+               "             (gc) (cons (cons 0 0) (cons 0 0))"
+               "             (k-k 1))"
+               "      k-v))",
+               "((7 8) 1)");
+
+  // the continuation itself survives a gc while only a global refers to it
+  EXPECT_NO_ERROR_SRC ("(define k-first t)");
+  EXPECT_INT ("(let ((n (call/cc (lambda (k) (set! k-k k) 1))))"
+              "  (if k-first"
+              "      (progn (set! k-first nil) (gc) (cons 0 0) (k-k 2))"
+              "      n))",
+              2);
   return TEST_RESULT_SUCCESS;
 }

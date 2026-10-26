@@ -18,6 +18,7 @@ enum stackframe_kind
   F_CONDITION_CASE,
   F_UNWIND_PROTECT,
   F_RERAISE, // re-raise error after a temporary stop in the stack
+  F_RECONT,  // re-apply continuation after a temporary stop in the stack
   F_RESTORE, // restore value
 };
 
@@ -40,9 +41,10 @@ struct stackframe
     struct { Lisp_Object symbol;           } define;
     struct { Lisp_Object symbol;           } setq;
     struct { Lisp_Object handlers, errsym; } conditioncase;
-    struct { Lisp_Object cleanups;         } unwindprotect;
+    struct { Lisp_Object cleanups, token;  } unwindprotect;
     struct { Lisp_Object val;              } restore;
     struct { Lisp_Object err;              } reraise;
+    struct { Lisp_Object cont, v;          } recont;
 
     // option for reading named slots regardless of kind
     Lisp_Object slots[2];
@@ -63,20 +65,37 @@ struct stack
   struct stackpage *pages;
 };
 
+// forward declared in lisp.h, real definition can only come here
+// since the continuation contains a snapshot of the stack
+struct lisp_continuation
+{
+  struct lisp_cplx_header header;
+  size_t size;
+  struct stackframe stacksnap[];
+};
+
 struct stack *stack_init ();
+void stack_free (struct stack *s);
 void stack_push_halt (struct stack *s, Lisp_Object env);
 void stack_push_seq (struct stack *s, Lisp_Object env, Lisp_Object rest);
-void stack_push_args (struct stack *s, Lisp_Object env, Lisp_Object argl, Lisp_Object unev);
+void stack_push_args (struct stack *s, Lisp_Object env, Lisp_Object argl,
+                      Lisp_Object unev);
 void stack_push_if (struct stack *s, Lisp_Object env, Lisp_Object body);
 void stack_push_define (struct stack *s, Lisp_Object env, Lisp_Object symbol);
 void stack_push_setq (struct stack *s, Lisp_Object env, Lisp_Object symbol);
-void stack_push_conditioncase (struct stack *s, Lisp_Object env, Lisp_Object errsym,
-                               Lisp_Object handlers);
-void stack_push_unwindprotect (struct stack *s, Lisp_Object env, Lisp_Object cleanups);
+void stack_push_conditioncase (struct stack *s, Lisp_Object env,
+                               Lisp_Object errsym, Lisp_Object handlers);
+void stack_push_unwindprotect (struct stack *s, Lisp_Object env,
+                               Lisp_Object cleanups, Lisp_Object token);
 void stack_push_restore (struct stack *s, Lisp_Object env, Lisp_Object val);
 void stack_push_reraise (struct stack *s, Lisp_Object env, Lisp_Object err);
+void stack_push_recont (struct stack *s, Lisp_Object env, Lisp_Object cont,
+                        Lisp_Object v);
 struct stackframe stack_pop (struct stack *s);
 void stack_walk (struct stack *s, void (*fun) (struct stackframe));
 Lisp_Object stack_backtrace (struct stack *s, int depthfrom);
+size_t stack_depth (struct stack *s);
+void stack_snapshot (struct stack *s, struct stackframe *dst);
+struct stack *stack_snapshot_restore (size_t size, struct stackframe *src);
 
 #endif /* STACK_H */

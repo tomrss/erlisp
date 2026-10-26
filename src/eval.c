@@ -43,11 +43,19 @@ lispmachine_init (Lisp_Object env, Lisp_Object form)
   struct lispmachine *lm = malloc (sizeof (struct lispmachine));
   lm->stack = stack_init ();
   lm->reductions = 0;
+  lm->unwtoken = 0;
   lm->err = q_nil;
   goto_eval (lm, env, form);
   stack_push_halt (lm->stack, env);
   return lm;
 };
+
+void
+lispmachine_free (struct lispmachine *lm)
+{
+  stack_free (lm->stack);
+  free (lm);
+}
 
 int
 lispmachine_step (struct lispmachine *lm)
@@ -167,7 +175,7 @@ eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out)
           // unhandled error
           *out = lm->err;
           currentlm = NULL;
-          free (lm);
+          lispmachine_free (lm);
           return 0;
         }
     } // no else: just resume machine steps
@@ -177,7 +185,7 @@ eval (Lisp_Object env, Lisp_Object form, Lisp_Object *out)
 
   Lisp_Object result = lispmachine_get_value (lm);
   currentlm = NULL;
-  free (lm);
+  lispmachine_free (lm);
   *out = result;
   return 1;
 }
@@ -207,7 +215,8 @@ lispmachine_cur_stack_walk (void (*fun) (struct stackframe))
 }
 
 void
-lispmachine_stack_walk (struct lispmachine *lm, void (*fun) (struct stackframe))
+lispmachine_stack_walk (struct lispmachine *lm,
+                        void (*fun) (struct stackframe))
 {
   stack_walk (lm->stack, fun);
 }
@@ -283,7 +292,9 @@ step_eval (struct lispmachine *lm)
             }
           break;
         case SF_UNWIND_PROTECT:
-          stack_push_unwindprotect (lm->stack, env, f_cdr (tail));
+          lm->unwtoken++;
+          stack_push_unwindprotect (lm->stack, env, f_cdr (tail),
+                                    box_int (lm->unwtoken));
           goto_eval (lm, env, f_car (tail));
           break;
         case SF_CONDITION_CASE:
@@ -298,6 +309,57 @@ step_eval (struct lispmachine *lm)
     eval_application (lm, env, form);
 }
 
+static int
+continuation_has_unwind_frame (Lisp_Continuation *ucont,
+                               struct stackframe target)
+{
+  int targettoken = unbox_int (target.unwindprotect.token);
+  for (int i = ucont->size - 1; i >= 0; i--)
+    {
+      struct stackframe f = ucont->stacksnap[i];
+      if (f.kind != F_UNWIND_PROTECT)
+        continue;
+
+      int conttoken = unbox_int (f.unwindprotect.token);
+      if (conttoken < targettoken)
+        // we passed the token because we reached a lesser one, but no match
+        return 0;
+      if (conttoken == targettoken)
+        // match! continuation has that frame
+        return 1;
+      // no match, but there could be in lower frames, continue
+    }
+  // scanned whole stack, but there is no tok reference
+  return 0;
+}
+
+static void
+apply_continuation (struct lispmachine *lm, Lisp_Object cont, Lisp_Object arg)
+{
+  Lisp_Continuation *ucont = unbox_continuation (cont);
+
+  struct stackframe f;
+  while ((f = stack_pop (lm->stack)).kind != F_UNWIND_PROTECT
+         && f.kind != F_HALT)
+    ;
+
+  if (f.kind == F_UNWIND_PROTECT)
+    {
+      // launch cleanups of the unwind frame if its missing from the
+      // continuation stack
+      if (!continuation_has_unwind_frame (ucont, f))
+        {
+          stack_push_recont (lm->stack, f.env, cont, arg);
+          eval_body (lm, f.env, f.unwindprotect.cleanups);
+          return;
+        }
+    }
+
+  stack_free (lm->stack);
+  lm->stack = stack_snapshot_restore (ucont->size, ucont->stacksnap);
+  goto_return (lm, arg);
+}
+
 static void
 step_apply (struct lispmachine *lm)
 {
@@ -306,6 +368,15 @@ step_apply (struct lispmachine *lm)
 
   Lisp_Object fun = lm->mapply.proc;
   Lisp_Object args = lm->mapply.args;
+
+  if (continuationp (fun))
+    {
+      if (nil (args) || !nil (f_cdr (args)))
+        funcargs_error (1, 1, unbox_int (f_length (args)));
+
+      apply_continuation (lm, fun, f_car (args));
+      return;
+    }
 
   if (!lambdap (fun) && !subrp (fun))
     invalidfunc_error (fun);
@@ -412,6 +483,9 @@ step_return (struct lispmachine *lm)
       break;
     case F_RERAISE:
       xsignal_err (frame.reraise.err);
+      break;
+    case F_RECONT:
+      goto_apply (lm, frame.recont.cont, f_cons (frame.recont.v, q_nil));
       break;
     case F_RESTORE:
       goto_return (lm, frame.restore.val);

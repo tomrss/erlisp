@@ -265,6 +265,8 @@ f_equal_p (Lisp_Object x, Lisp_Object y)
       break;
     case LISP_PORT:
       break;
+    case LISP_CONT:
+      break;
     }
   // TODO
   return q_nil;
@@ -1227,6 +1229,21 @@ f_flush_output_port (Lisp_Object port)
   return q_nil;
 }
 
+void
+f_callcc (struct lispmachine *lm, UNUSED int argc, Lisp_Object *argv)
+{
+  size_t stackdepth = stack_depth (lm->stack);
+  Lisp_Object cont = make_uninit_continuation (stackdepth);
+  stack_snapshot (lm->stack, unbox_continuation (cont)->stacksnap);
+  goto_apply (lm, argv[0], f_cons (cont, q_nil));
+}
+
+Lisp_Object
+f_procedurep (Lisp_Object o)
+{
+  return BOOL (procedurep (o));
+}
+
 static Lisp_Object
 special_form (const char *name, enum special_form sf)
 {
@@ -1272,7 +1289,6 @@ init_builtins ()
   p_current_output_port = make_file_port (stdout, PORT_OUT);
 
   l_globalenv = env_new (q_nil);
-  stack_init ();
 
   init_prelude ();
 }
@@ -1395,6 +1411,10 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, DEFSUBR ("write", 1, 2, f_write));
   obarray_put (o, DEFSUBR ("display", 1, 2, f_display));
   obarray_put (o, DEFSUBR ("flush-output-port", 0, 1, f_flush_output_port));
+  obarray_put (o, DEFSUBR ("call/cc", 1, SPECIAL, f_callcc));
+  obarray_put (
+      o, DEFSUBR ("call-with-current-continuation", 1, SPECIAL, f_callcc));
+  obarray_put (o, DEFSUBR ("procedure?", 1, 1, f_procedurep));
 }
 
 // helpers impl

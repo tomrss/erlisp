@@ -29,6 +29,8 @@ struct lispmachine
   };
   struct stack *stack;
 
+  // token for recognizing unwind protect frames when using continuations
+  unsigned int unwtoken;
   // unit of work, term borrowed from erlang
   unsigned long reductions;
 
@@ -38,6 +40,7 @@ struct lispmachine
 };
 
 struct lispmachine *lispmachine_init (Lisp_Object env, Lisp_Object form);
+void lispmachine_free (struct lispmachine *lm);
 int lispmachine_step (struct lispmachine *lm);
 Lisp_Object lispmachine_get_value (struct lispmachine *lm);
 int lispmachine_handle (struct lispmachine *lm);

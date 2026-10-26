@@ -1,5 +1,6 @@
 #include "print.h"
 #include "lisp.h"
+#include "stack.h"
 #include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -201,6 +202,9 @@ fprint_form (Lisp_Port *p, Lisp_Object form, int display)
         port_write_char (unbox_char (form), p);
       else
         fprint_char (p, unbox_char (form));
+      break;
+    case LISP_CONT:
+      port_printf (p, "[continuation,%zu]", unbox_continuation (form)->size);
       break;
     }
 }

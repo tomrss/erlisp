@@ -5,3 +5,4 @@ tmp/
 compile_commands.json
 .cache/
 bench/results/
+bench/profiles/

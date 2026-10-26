@@ -255,14 +255,7 @@ struct lisp_port
   int (*close) (struct lisp_port *p);
 };
 
-struct stackframe; // forward declaration, type defined in stack.h
-
-struct lisp_continuation
-{
-  struct lisp_cplx_header header;
-  size_t size;
-  struct stackframe *stack;
-};
+struct lisp_continuation; // forward declaration, depends on stack
 
 /* Conversion from/to boxed Lisp_Object to/from explicit types */
 
@@ -570,6 +563,8 @@ Lisp_Object f_write_char (Lisp_Object c, Lisp_Object port);
 Lisp_Object f_write (Lisp_Object obj, Lisp_Object port);
 Lisp_Object f_display (Lisp_Object obj, Lisp_Object port);
 Lisp_Object f_flush_output_port (Lisp_Object port);
+void f_callcc (struct lispmachine *lm, int argc, Lisp_Object *argv);
+Lisp_Object f_procedurep (Lisp_Object o);
 
 extern Lisp_Object q_nil;
 extern Lisp_Object q_t;
@@ -711,6 +706,12 @@ static inline int
 subrp (Lisp_Object o)
 {
   return tag_of (o) == LISP_TAG_SUBR;
+}
+
+static inline int
+procedurep (Lisp_Object o)
+{
+  return subrp (o) || lambdap (o) || continuationp (o);
 }
 
 static inline const char *
