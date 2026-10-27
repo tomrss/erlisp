@@ -62,7 +62,7 @@ lispmachine_free (struct lispmachine *lm)
 int
 lispmachine_step (struct lispmachine *lm)
 {
-  gc_maybe ();
+  gcmaybe ();
   switch (lm->mode)
     {
     case M_EVAL:

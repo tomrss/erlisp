@@ -79,10 +79,11 @@ finalize_port (void *portptr)
 void
 init_alloc ()
 {
-  // fixed-sized types: block size is the size of struct
   heap = malloc (sizeof (struct heap));
   if (heap == NULL)
-    memory_error ();
+    internal_error ("unable to initialize heap space\n");
+
+  // fixed-sized types: block size is the size of struct
   heap->conses = blkalloc_init (sizeof (Lisp_Cons));
   heap->symbols = blkalloc_init (sizeof (Lisp_Symbol));
   heap->ports
@@ -100,6 +101,7 @@ init_alloc ()
   heap->usedsize = 0;
   heap->lastgcused = 0;
   heap->gcgenerations = 0;
+  heap->gcrequested = 0;
 
   // artificial roots are something rarely used
   l_gcartificialroots = q_nil;
@@ -284,8 +286,15 @@ defsubr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 }
 
 int
-gc_maybe ()
+gcmaybe ()
 {
+  if (heap->gcrequested)
+    {
+      gc ();
+      heap->gcrequested = 0;
+      return 1;
+    }
+
   // TODO defines
   const float growthreshold = 5.;
   const size_t minheap = 1 * 1024 * 1024;
@@ -305,6 +314,12 @@ gc_maybe ()
     }
 
   return 0;
+}
+
+void
+gcrequest ()
+{
+  heap->gcrequested = 1;
 }
 
 void

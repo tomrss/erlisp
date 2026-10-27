@@ -23,6 +23,8 @@ struct heap
   size_t usedsize;
   size_t lastgcused;
   size_t gcgenerations;
+
+  int gcrequested;
 };
 
 struct memstats
@@ -56,7 +58,8 @@ Lisp_Object defsubr (const char *name, int minargs, int maxargs,
 
 void init_alloc ();
 struct memstats gc ();
-int gc_maybe ();
+int gcmaybe ();
+void gcrequest ();
 void gcprotect (Lisp_Object obj);
 void gcunprotect (Lisp_Object obj);
 struct memstats memstats ();

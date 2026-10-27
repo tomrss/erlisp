@@ -69,6 +69,7 @@ unbound_error (Lisp_Object symbol)
 NORETURN static inline void
 memory_error ()
 {
+  gcrequest ();
   f_signal (q_error_memory, q_nil);
 }
 
