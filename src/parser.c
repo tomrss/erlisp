@@ -75,6 +75,8 @@ parse_sexp_from_tok (Lexer *l, Token tok)
         // alloc it, it should not be managed and gc'd.
         int len = strlen (tok.string);
         Lisp_String *s = malloc (len + sizeof (Lisp_String));
+        if (s == NULL)
+          memory_error ();
         strncpy (s->data, tok.string, len);
         s->size = len;
         // TODO use intern function instead of this

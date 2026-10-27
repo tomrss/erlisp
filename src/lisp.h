@@ -549,6 +549,7 @@ extern Lisp_Object q_error_file;
 extern Lisp_Object q_error_funcargs;
 extern Lisp_Object q_error_funcinvalid;
 extern Lisp_Object q_error_maxhandlerdepth;
+extern Lisp_Object q_error_memory;
 extern Lisp_Object q_error_portclosed;
 extern Lisp_Object q_error_portinvalid;
 extern Lisp_Object q_error_portio;

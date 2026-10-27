@@ -1,4 +1,5 @@
 #include "lexer.h"
+#include "error.h"
 #include "lisp.h"
 #include "port.h"
 #include <ctype.h>
@@ -103,6 +104,8 @@ parse_number (Lexer *l, int firstchar)
   is_float = 0;
   bufsize = 20;
   buf = malloc (bufsize);
+  if (buf == NULL)
+    memory_error ();
 
   while (1)
     {
@@ -112,12 +115,13 @@ parse_number (Lexer *l, int firstchar)
         {
           // reallocate the buffer doubling its size
           bufsize *= 2;
-          buf = realloc (buf, bufsize);
-          if (!buf)
+          char *newbuf = realloc (buf, bufsize);
+          if (newbuf == NULL)
             {
-              // FIXME don't know what to do here...
-              fprintf (stderr, "Out of memory!!\n");
+              free (buf);
+              memory_error ();
             }
+          buf = newbuf;
         }
 
       buf[pos++] = c;
@@ -157,6 +161,8 @@ parse_string (Lexer *l)
   pos = 0;
   bufsize = 20;
   buf = malloc (bufsize);
+  if (buf == NULL)
+    memory_error ();
 
   while ((c = port_read_char (l->stream)) != EOF && c != '"' && c != '\n')
     {
@@ -164,12 +170,13 @@ parse_string (Lexer *l)
         {
           // reallocate the buffer doubling its size
           bufsize *= 2;
-          buf = realloc (buf, bufsize);
-          if (!buf)
+          char *newbuf = realloc (buf, bufsize);
+          if (newbuf == NULL)
             {
-              // FIXME don't know what to do here...
-              fprintf (stderr, "Out of memory!!\n");
+              free (buf);
+              memory_error ();
             }
+          buf = newbuf;
         }
 
       buf[pos++] = c;
@@ -264,6 +271,8 @@ try_parse_symbol (Lexer *l, int firstchar)
   pos = 0;
   bufsize = 20;
   buf = malloc (bufsize);
+  if (buf == NULL)
+    memory_error ();
 
   while (1)
     {
@@ -271,12 +280,13 @@ try_parse_symbol (Lexer *l, int firstchar)
         {
           // reallocate the buffer doubling its size
           bufsize *= 2;
-          buf = realloc (buf, bufsize);
-          if (!buf)
+          char *newbuf = realloc (buf, bufsize);
+          if (newbuf == NULL)
             {
-              // FIXME don't know what to do here...
-              fprintf (stderr, "Out of memory!!\n");
+              free (buf);
+              memory_error ();
             }
+          buf = newbuf;
         }
 
       buf[pos++] = c;

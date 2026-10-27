@@ -81,6 +81,8 @@ init_alloc ()
 {
   // fixed-sized types: block size is the size of struct
   heap = malloc (sizeof (struct heap));
+  if (heap == NULL)
+    memory_error ();
   heap->conses = blkalloc_init (sizeof (Lisp_Cons));
   heap->symbols = blkalloc_init (sizeof (Lisp_Symbol));
   heap->ports
@@ -230,6 +232,8 @@ make_subr (const char *name, int minargs, int maxargs, union lisp_subr_fun fun)
 {
   // plain allocation, SUBR is not subject to memory management and gc
   Lisp_Subr *subr = malloc (sizeof (Lisp_Subr));
+  if (subr == NULL)
+    memory_error ();
 
   subr->header.minargs = minargs;
   subr->header.maxargs = maxargs;

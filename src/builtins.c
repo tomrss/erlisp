@@ -34,6 +34,7 @@ Lisp_Object q_error_file;
 Lisp_Object q_error_funcargs;
 Lisp_Object q_error_funcinvalid;
 Lisp_Object q_error_maxhandlerdepth;
+Lisp_Object q_error_memory;
 Lisp_Object q_error_portclosed;
 Lisp_Object q_error_portinvalid;
 Lisp_Object q_error_portio;
@@ -1113,6 +1114,7 @@ init_builtins ()
   q_error_funcargs = make_str_symbol ("func-args-error");
   q_error_funcinvalid = make_str_symbol ("invalid-func-error");
   q_error_maxhandlerdepth = make_str_symbol ("max-handler-depth-error");
+  q_error_memory = make_str_symbol ("memory-error");
   q_error_portclosed = make_str_symbol ("port-closed-error");
   q_error_portinvalid = make_str_symbol ("port-invalid-error");
   q_error_portio = make_str_symbol ("port-io-error");
@@ -1155,6 +1157,7 @@ obarray_register_builtins (Lisp_Object o)
   obarray_put (o, q_error_funcargs);
   obarray_put (o, q_error_funcinvalid);
   obarray_put (o, q_error_maxhandlerdepth);
+  obarray_put (o, q_error_memory);
   obarray_put (o, q_error_portclosed);
   obarray_put (o, q_error_portinvalid);
   obarray_put (o, q_error_portio);

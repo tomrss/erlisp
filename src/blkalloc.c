@@ -13,6 +13,8 @@ blkpagenew (blkallocator *blka)
 
   // aligend memory is crucial for page recognition from object ptr
   struct blkpage *page = aligned_alloc (PAGE_SIZE, PAGE_SIZE);
+  if (page == NULL)
+    memory_error ();
 
   page->owner = blka;
   page->numused = 0;
@@ -121,6 +123,8 @@ blkalloc_init (size_t blksize)
   // TODO why calloc instead of malloc? i don't remember and cannot find a good
   // reason right now.
   blkallocator *blka = calloc (1, sizeof (blkallocator));
+  if (blka == NULL)
+    memory_error ();
   *blka = (struct blkallocator){
     .blksize = blksize,
     // (total page size - size of page struct (blk) because the page total

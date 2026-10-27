@@ -8,7 +8,8 @@ static struct stackpage *
 page_new (struct stack *s)
 {
   struct stackpage *page = malloc (sizeof (struct stackpage));
-  // TODO check malloc
+  if (page == NULL)
+    memory_error ();
   page->depth = 0;
   page->next = s->pages;
   s->pages = page;
@@ -20,7 +21,8 @@ struct stack *
 stack_init ()
 {
   struct stack *s = malloc (sizeof (struct stack));
-  // TODO check malloc
+  if (s == NULL)
+    memory_error ();
   s->numpages = 0;
   s->pages = NULL;
   page_new (s);
@@ -272,13 +274,19 @@ struct stack *
 stack_snapshot_restore (size_t size, struct stackframe *src)
 {
   struct stack *s = malloc (sizeof (struct stack));
-  // TODO check malloc
+  if (s == NULL)
+    memory_error ();
   s->numpages = 0;
   s->pages = NULL;
 
   for (size_t offset = 0; offset < size; offset += STACKPAGESIZE)
     {
       struct stackpage *p = malloc (sizeof (struct stackpage));
+      if (p == NULL)
+        {
+          stack_free (s);
+          memory_error ();
+        }
       size_t depth = size - offset;
       if (depth > STACKPAGESIZE)
         depth = STACKPAGESIZE;

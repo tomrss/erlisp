@@ -41,6 +41,8 @@ struct lispmachine *
 lispmachine_init (Lisp_Object env, Lisp_Object form)
 {
   struct lispmachine *lm = malloc (sizeof (struct lispmachine));
+  if (lm == NULL)
+    memory_error ();
   lm->stack = stack_init ();
   lm->reductions = 0;
   lm->unwtoken = 0;

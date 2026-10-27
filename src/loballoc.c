@@ -8,6 +8,8 @@ struct loballocator *
 loballoc_init ()
 {
   struct loballocator *loba = malloc (sizeof (struct loballocator));
+  if (loba == NULL)
+    memory_error ();
   loba->size = 0;
   loba->numblk = 0;
   loba->lobblks = NULL;
@@ -18,6 +20,8 @@ void *
 loballoc (struct loballocator *loba, size_t size)
 {
   struct lobblk *blk = malloc (sizeof (struct lobblk) + size);
+  if (blk == NULL)
+    memory_error ();
   blk->owner = loba;
   blk->allocsize = size;
   blk->gcmark = 0;

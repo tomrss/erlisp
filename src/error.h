@@ -67,6 +67,12 @@ unbound_error (Lisp_Object symbol)
 }
 
 NORETURN static inline void
+memory_error ()
+{
+  f_signal (q_error_memory, q_nil);
+}
+
+NORETURN static inline void
 stackoverflow_error ()
 {
   f_signal (q_error_stackoverflow, f_cons (box_int (STACKSIZE), q_nil));

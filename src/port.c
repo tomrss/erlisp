@@ -98,8 +98,7 @@ string_port_put_char (int c, Lisp_Port *p)
       p->backend.string.size += PORTOUTSTRINCR;
       char *buf = realloc (p->backend.string.data, p->backend.string.size);
       if (buf == NULL)
-        // todo this is bad!
-        f_signal (q_error, f_cons (make_string ("not enough memory"), q_nil));
+        memory_error ();
       p->backend.string.data = buf;
     }
 
@@ -143,6 +142,8 @@ make_input_string_port (Lisp_Object string)
   // free the input string.  probably the correct thing to do would be
   // to keep the Lisp_Object string and gc mark it with the port.
   p->backend.string.data = malloc (unbox_string (string)->size);
+  if (p->backend.string.data == NULL)
+    memory_error ();
   memcpy (p->backend.string.data, unbox_string (string)->data,
           unbox_string (string)->size);
 
@@ -158,6 +159,8 @@ make_output_string_port ()
   Lisp_Port *p = make_uninit_port ();
   p->direction = PORT_OUT;
   p->backend.string.data = malloc (PORTOUTSTRINCR);
+  if (p->backend.string.data == NULL)
+    memory_error ();
   p->backend.string.size = PORTOUTSTRINCR;
   p->backend.string.pos = 0;
   p->ops = &string_ops;
